@@ -1,0 +1,12 @@
+org:
+  slf4j:
+    simpleLogger:
+      logFile: /tmp/java_mcp_server.log
+      defaultLogLevel: info
+      showDateTime: true
+      dateTimeFormat: "yyyy-MM-dd HH:mm:ss.SSS"
+      showThreadName: false
+      showLogName: true
+      showShortLogName: true
+      log:
+        io.modelcontextprotocol.spec.McpServerSession: error

@@ -1,0 +1,160 @@
+package com.softtek.mcp;
+
+import com.softtek.mcp.model.ProjectEntry;
+import com.softtek.mcp.model.ProjectLoadException;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Collection;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import spoon.Launcher;
+import spoon.MavenLauncher;
+import spoon.reflect.CtModel;
+
+public class ProjectManager {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ProjectManager.class);
+
+    private final ConcurrentHashMap<String, ProjectEntry> entries = new ConcurrentHashMap<>();
+    private final ProjectLoader projectLoader = new ProjectLoader();
+    private final BuildDetector buildDetector = new BuildDetector();
+
+    public ProjectEntry load(String source, String alias, Instant expiryDate) throws ProjectLoadException {
+        removeExpired();
+
+        if (expiryDate == null) {
+            expiryDate = Instant.now().plus(10, ChronoUnit.MINUTES);
+        }
+
+        Path projectDir = projectLoader.resolveSource(source);
+        BuildDetector.BuildInfo buildInfo = buildDetector.detect(projectDir);
+        LOG.info("Build detected: {} ({}) for {}", buildInfo.type(), buildInfo.detail(), projectDir);
+
+        String name = deriveName(projectDir, source);
+        if (alias == null) alias = name;
+
+        if (expiryDate == null) {
+            expiryDate = Instant.now().plus(10, ChronoUnit.MINUTES);
+        }
+
+        ProjectEntry old = entries.remove(name);
+        if (old != null) {
+            projectLoader.cleanup(old.projectDir());
+            LOG.info("Replaced previously loaded project '{}'", name);
+        }
+
+        try {
+            Launcher launcher = createLauncher(projectDir, buildInfo);
+            CtModel model = launcher.buildModel();
+
+            ProjectEntry entry = new ProjectEntry(name, alias, expiryDate, projectDir, launcher, model, buildInfo.type().name());
+            entries.put(name, entry);
+            LOG.info("Project '{}' loaded successfully ({} types)", name, model.getAllTypes().size());
+            return entry;
+        } catch (Exception e) {
+            projectLoader.cleanup(projectDir);
+            throw new ProjectLoadException("PARSE_ERROR", "Failed to parse project: " + e.getMessage());
+        }
+    }
+
+    public ProjectEntry find(String nameOrAlias) {
+        removeExpired();
+        for (ProjectEntry entry : entries.values()) {
+            if (entry.alias() != null && entry.alias().equals(nameOrAlias)) {
+                return entry;
+            }
+        }
+        return entries.get(nameOrAlias);
+    }
+
+    public ProjectEntry remove(String nameOrAlias) {
+        ProjectEntry entry = entries.remove(nameOrAlias);
+        if (entry != null) {
+            projectLoader.cleanup(entry.projectDir());
+            LOG.info("Unloaded project '{}'", nameOrAlias);
+        }
+        return entry;
+    }
+
+    public Collection<ProjectEntry> list() {
+        removeExpired();
+        return entries.values();
+    }
+
+    private void removeExpired() {
+        Instant now = Instant.now();
+        entries.values().removeIf(entry -> {
+            if (entry.expiryDate() != null && now.isAfter(entry.expiryDate())) {
+                LOG.info("Removing expired project '{}' (expired at {})", entry.name(), entry.expiryDate());
+                projectLoader.cleanup(entry.projectDir());
+                return true;
+            }
+            return false;
+        });
+    }
+
+    public static Launcher createLauncher(Path projectDir, BuildDetector.BuildInfo buildInfo) {
+        Launcher launcher;
+        if (buildInfo.type() == BuildDetector.BuildType.MAVEN) {
+            try {
+                launcher = new MavenLauncher(projectDir.toAbsolutePath().toString(), MavenLauncher.SOURCE_TYPE.APP_SOURCE);
+                LOG.info("Using MavenLauncher for {}", projectDir);
+                return launcher;
+            } catch (Exception e) {
+                LOG.warn("MavenLauncher failed ({}), falling back to noclasspath", e.getMessage());
+            }
+        }
+
+        launcher = new Launcher();
+        launcher.getEnvironment().setNoClasspath(true);
+        launcher.getEnvironment().setAutoImports(true);
+
+        Path srcDir = findSourceDir(projectDir, buildInfo);
+        if (srcDir != null && Files.isDirectory(srcDir)) {
+            launcher.addInputResource(srcDir.toAbsolutePath().toString());
+        } else if (buildInfo.type() == BuildDetector.BuildType.GRADLE) {
+            addGradleSourceDirs(launcher, projectDir);
+        } else {
+            launcher.addInputResource(projectDir.toAbsolutePath().toString());
+        }
+
+        LOG.info("Using noclasspath Launcher for {} (src: {})", buildInfo.type(), srcDir);
+        return launcher;
+    }
+
+    private static Path findSourceDir(Path projectDir, BuildDetector.BuildInfo buildInfo) {
+        if (buildInfo.type() == BuildDetector.BuildType.MAVEN) {
+            Path src = projectDir.resolve("src/main/java");
+            if (Files.isDirectory(src)) return src;
+        }
+        Path src = projectDir.resolve("src");
+        if (Files.isDirectory(src)) return src;
+        return projectDir;
+    }
+
+    private static void addGradleSourceDirs(Launcher launcher, Path projectDir) {
+        String[] gradleSrcs = {"src/main/java", "src/main/kotlin", "src/main/groovy"};
+        boolean found = false;
+        for (String gs : gradleSrcs) {
+            Path p = projectDir.resolve(gs);
+            if (Files.isDirectory(p)) {
+                launcher.addInputResource(p.toAbsolutePath().toString());
+                found = true;
+            }
+        }
+        if (!found) {
+            launcher.addInputResource(projectDir.toAbsolutePath().toString());
+        }
+    }
+
+    public static String deriveName(Path projectDir, String source) {
+        String name = projectDir.getFileName().toString();
+        return name;
+    }
+}
