@@ -63,12 +63,12 @@ public class ProjectManager {
 
         if (lombokInSources && autoDelombok) {
             try {
-                Path delombokedDir = lombokDelomboker.delombok(projectDir);
+                Path delombokedDir = lombokDelomboker.delombok(projectDir, buildInfo.type());
                 sourceToAnalyze = delombokedDir;
                 delomboked = true;
                 lombokVersion = lombokInfo.version();
-                LOG.info("Lombok detected (version={}). Using delomboked source: {}",
-                        lombokVersion, delombokedDir);
+                LOG.info("Lombok detected (version={}, build={}). Using delomboked source: {}",
+                        lombokVersion, buildInfo.type(), delombokedDir);
             } catch (ProjectLoadException e) {
                 LOG.warn("Auto-delombok failed ({}). Falling back to original source. "
                         + "Lombok-generated members will be missing from the model.", e.getMessage());
