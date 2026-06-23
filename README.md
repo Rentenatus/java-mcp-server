@@ -31,7 +31,7 @@ This project is directly inspired by [cobol-mcp-server](https://github.com/aferr
 
 | Tool | Description |
 |---|---|
-| `load_java_project` | Load a Java project from a path, Git URL, or archive |
+| `load_java_project` | Load a Java project from a path, Git URL, or archive. Supports optional `delombok` (default true) to expose Lombok-generated members in the AST. |
 | `list_loaded_projects` | List all currently loaded projects |
 | `unload_java_project` | Unload a project and free resources |
 | `project_metadata` | Get metadata (name, build type, type count) |
@@ -39,7 +39,7 @@ This project is directly inspired by [cobol-mcp-server](https://github.com/aferr
 | `list_packages` | List all packages in the project |
 | `list_classes` | List all classes, optionally filtered by package |
 | `list_methods` | List all methods in a class or project-wide |
-| `inspect_class` | Deep-dive into a class: fields, methods, superclass, interfaces, annotations |
+| `inspect_class` | Deep-dive into a class: fields, methods, superclass, interfaces, annotations. For Lombok projects loaded with `delombok=false`, appends a `Lombok-predicted members` section listing what Lombok would generate. |
 | `inspect_method` | Deep-dive into a method: signature, parameters, return type, body |
 | `inspect_field` | Deep-dive into a field: type, modifiers, annotations, initializer |
 | `list_constructors` | List all constructors in a class with parameters and bodies |
@@ -146,8 +146,24 @@ The server will listen on stdin for JSON-RPC messages and respond on stdout.
 ## How it works
 
 1. The server loads a Java project using Spoon, optionally leveraging Maven/Gradle metadata for full classpath resolution.
-2. Spoon builds a full AST (CtModel) with resolved types and references.
-3. Each MCP tool maps to a precise query against that model — no guessing, no hallucination.
-4. Results are returned as structured JSON that the agent can safely reason about.
+2. If Lombok is detected and `delombok=true` (default), the project is first run through `delombok` so that Lombok-generated members (`getX()`, `setX()`, `equals()`, etc.) become real AST nodes. If `delombok=false`, those members are absent from the model but `inspect_class` lists them under a `Lombok-predicted members` section as a safety net.
+3. Spoon builds a full AST (CtModel) with resolved types and references.
+4. Each MCP tool maps to a precise query against that model — no guessing, no hallucination.
+5. Results are returned as structured JSON that the agent can safely reason about.
 
 Projects auto-expire after 10 minutes by default. Use the `expiryDate` parameter when loading to override.
+
+## Lombok support
+
+Lombok is an annotation processor that generates code at compile time. Spoon alone sees only the annotations (`@Data`, `@Getter`, …) and not the methods Lombok would generate, which can lead to incomplete analysis. To handle this, `java-mcp-server` ships with a built-in delombok pipeline:
+
+- Auto-detects Lombok in `pom.xml` or `build.gradle[.kts]`.
+- Locates the Lombok JAR in `~/.java-mcp-server/lombok/` or downloads it from Maven Central.
+- Runs `delombok` on the project sources, producing a fully expanded directory.
+- Feeds that directory to Spoon so generated getters/setters/equals/etc. are real AST members.
+
+Disable with `delombok=false` if you want raw source analysis or are debugging.
+
+## Logs
+
+By default, logs are written to `/tmp/java_mcp_server.log` (configurable via `src/main/resources/application.yaml`).

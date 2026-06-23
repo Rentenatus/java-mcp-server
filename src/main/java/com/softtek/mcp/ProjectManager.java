@@ -24,8 +24,15 @@ public class ProjectManager {
     private final ConcurrentHashMap<String, ProjectEntry> entries = new ConcurrentHashMap<>();
     private final ProjectLoader projectLoader = new ProjectLoader();
     private final BuildDetector buildDetector = new BuildDetector();
+    private final LombokDetector lombokDetector = new LombokDetector();
+    private final LombokDelomboker lombokDelomboker = new LombokDelomboker();
 
     public ProjectEntry load(String source, String alias, Instant expiryDate) throws ProjectLoadException {
+        return load(source, alias, expiryDate, true);
+    }
+
+    public ProjectEntry load(String source, String alias, Instant expiryDate, boolean autoDelombok)
+            throws ProjectLoadException {
         removeExpired();
 
         if (expiryDate == null) {
@@ -39,25 +46,53 @@ public class ProjectManager {
         String name = deriveName(projectDir, source);
         if (alias == null) alias = name;
 
-        if (expiryDate == null) {
-            expiryDate = Instant.now().plus(10, ChronoUnit.MINUTES);
-        }
-
         ProjectEntry old = entries.remove(name);
         if (old != null) {
             projectLoader.cleanup(old.projectDir());
+            if (old.delomboked()) {
+                lombokDelomboker.cleanup(old.projectDir());
+            }
             LOG.info("Replaced previously loaded project '{}'", name);
         }
 
+        boolean delomboked = false;
+        String lombokVersion = null;
+        Path sourceToAnalyze = projectDir;
+        LombokDetector.LombokInfo lombokInfo = lombokDetector.detect(projectDir);
+        boolean lombokInSources = lombokInfo.present() || lombokDetector.hasLombokInSources(projectDir);
+
+        if (lombokInSources && autoDelombok) {
+            try {
+                Path delombokedDir = lombokDelomboker.delombok(projectDir);
+                sourceToAnalyze = delombokedDir;
+                delomboked = true;
+                lombokVersion = lombokInfo.version();
+                LOG.info("Lombok detected (version={}). Using delomboked source: {}",
+                        lombokVersion, delombokedDir);
+            } catch (ProjectLoadException e) {
+                LOG.warn("Auto-delombok failed ({}). Falling back to original source. "
+                        + "Lombok-generated members will be missing from the model.", e.getMessage());
+            }
+        } else if (lombokInSources) {
+            LOG.info("Lombok detected but auto-delombok disabled. Lombok-generated members "
+                    + "will be missing from the model.");
+        }
+
         try {
-            Launcher launcher = createLauncher(projectDir, buildInfo);
+            Launcher launcher = createLauncher(sourceToAnalyze, buildInfo);
             CtModel model = launcher.buildModel();
 
-            ProjectEntry entry = new ProjectEntry(name, alias, expiryDate, projectDir, launcher, model, buildInfo.type().name());
+            ProjectEntry entry = new ProjectEntry(name, alias, expiryDate,
+                    sourceToAnalyze, launcher, model, buildInfo.type().name(),
+                    delomboked, lombokVersion);
             entries.put(name, entry);
-            LOG.info("Project '{}' loaded successfully ({} types)", name, model.getAllTypes().size());
+            LOG.info("Project '{}' loaded successfully ({} types, delomboked={})",
+                    name, model.getAllTypes().size(), delomboked);
             return entry;
         } catch (Exception e) {
+            if (delomboked) {
+                lombokDelomboker.cleanup(sourceToAnalyze);
+            }
             projectLoader.cleanup(projectDir);
             throw new ProjectLoadException("PARSE_ERROR", "Failed to parse project: " + e.getMessage());
         }
@@ -77,6 +112,9 @@ public class ProjectManager {
         ProjectEntry entry = entries.remove(nameOrAlias);
         if (entry != null) {
             projectLoader.cleanup(entry.projectDir());
+            if (entry.delomboked()) {
+                lombokDelomboker.cleanup(entry.projectDir());
+            }
             LOG.info("Unloaded project '{}'", nameOrAlias);
         }
         return entry;
@@ -93,6 +131,9 @@ public class ProjectManager {
             if (entry.expiryDate() != null && now.isAfter(entry.expiryDate())) {
                 LOG.info("Removing expired project '{}' (expired at {})", entry.name(), entry.expiryDate());
                 projectLoader.cleanup(entry.projectDir());
+                if (entry.delomboked()) {
+                    lombokDelomboker.cleanup(entry.projectDir());
+                }
                 return true;
             }
             return false;

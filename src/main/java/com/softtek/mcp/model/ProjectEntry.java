@@ -7,5 +7,7 @@ public record ProjectEntry(
         java.nio.file.Path projectDir,
         spoon.Launcher launcher,
         spoon.reflect.CtModel model,
-        String buildType
+        String buildType,
+        boolean delomboked,
+        String lombokVersion
 ) {}
