@@ -31,6 +31,13 @@ public class LoadJavaProjectTool implements McpTool {
         return (String) request.arguments().get(key);
     }
 
+    private Boolean boolArg(McpSchema.CallToolRequest request, String key) {
+        Object v = request.arguments().get(key);
+        if (v instanceof Boolean b) return b;
+        if (v instanceof String s) return Boolean.parseBoolean(s);
+        return null;
+    }
+
     @Override
     public McpServerFeatures.SyncToolSpecification build() {
         McpSchema.Tool toolDef = McpSchema.Tool.builder("load_java_project")
@@ -43,7 +50,11 @@ public class LoadJavaProjectTool implements McpTool {
                                 "alias", Map.of("type", "string",
                                         "description", "Optional alias for referencing the project"),
                                 "expiryDate", Map.of("type", "string",
-                                        "description", "Optional ISO-8601 expiry date (e.g. 2026-12-31T23:59:59Z)")
+                                        "description", "Optional ISO-8601 expiry date (e.g. 2026-12-31T23:59:59Z)"),
+                                "delombok", Map.of("type", "boolean",
+                                        "description", "If true (default) and Lombok is detected, "
+                                                + "automatically run delombok to expose Lombok-generated "
+                                                + "members in the AST. Set false to load the raw source as-is.")
                         ),
                         "required", List.of("source")
                 ))
@@ -53,6 +64,8 @@ public class LoadJavaProjectTool implements McpTool {
             String source = arg(request, "source");
             String alias = arg(request, "alias");
             String expiryDateStr = arg(request, "expiryDate");
+            Boolean delombokArg = boolArg(request, "delombok");
+            boolean autoDelombok = delombokArg == null || delombokArg;
 
             Instant expiryDate = null;
             if (expiryDateStr != null && !expiryDateStr.isBlank()) {
@@ -64,14 +77,26 @@ public class LoadJavaProjectTool implements McpTool {
                 }
             }
 
-            LOG.info("Loading Java project: {} (alias={})", source, alias);
+            LOG.info("Loading Java project: {} (alias={}, delombok={})", source, alias, autoDelombok);
             try {
-                var entry = manager.load(source, alias, expiryDate);
-                String msg = "Java project loaded successfully: " + entry.name()
-                        + " (" + entry.model().getAllTypes().size() + " types)"
-                        + " [build: " + entry.buildType() + "]";
+                var entry = manager.load(source, alias, expiryDate, autoDelombok);
+                ObjectNode json = MAPPER.createObjectNode();
+                json.put("error", false);
+                json.put("message", "Java project loaded successfully");
+                json.put("name", entry.name());
+                json.put("alias", entry.alias());
+                json.put("types", entry.model().getAllTypes().size());
+                json.put("build", entry.buildType());
+                json.put("delomboked", entry.delomboked());
+                if (entry.lombokVersion() != null) {
+                    json.put("lombokVersion", entry.lombokVersion());
+                }
+                if (entry.delomboked()) {
+                    json.put("note", "Lombok-generated members are now visible in the AST. "
+                            + "If you set delombok=false, getters/setters/equals/etc. are absent from the model.");
+                }
                 return McpSchema.CallToolResult.builder()
-                        .addTextContent(msg)
+                        .addTextContent(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(json))
                         .isError(false)
                         .build();
             } catch (ProjectLoadException e) {
