@@ -29,6 +29,7 @@ import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 
 import com.softtek.mcp.ProjectManager;
+import com.softtek.mcp.VersionLoader;
 
 import java.util.List;
 import java.util.Map;
@@ -63,6 +64,7 @@ public class CheckProjectDirtyTool extends BaseJavaTool {
         DirtyCheckResult dirty = checkDirtyFullScan(entry);
         StringBuilder sb = new StringBuilder();
         sb.append("# Dirty Check: `").append(entry.name()).append("`\\n\\n");
+        sb.append("**MCP Server Version:** ").append(VersionLoader.getVersion()).append("\\n\\n");
 
         if (!dirty.isDirty()) {
             sb.append("> ✅ **Project is clean** — ")
