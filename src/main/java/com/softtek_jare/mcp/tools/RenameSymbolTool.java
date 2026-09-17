@@ -113,10 +113,13 @@ public class RenameSymbolTool extends BaseJavaTool {
             return error("scope must be 'method', 'field', or 'class'");
         }
 
-        // Write affected files via EditManager — text-based replacement preserves formatting
+        // Write affected files via EditManager — line-aware replacement preserves formatting
+        // and skips string literals and comments to avoid corrupting them
+        java.util.regex.Pattern namePattern = java.util.regex.Pattern.compile(
+                "\\b" + java.util.regex.Pattern.quote(oldName) + "\\b");
         for (Path file : affectedFiles) {
             String source = Files.readString(file);
-            String newContent = source.replaceAll("\\b" + java.util.regex.Pattern.quote(oldName) + "\\b", newName);
+            String newContent = replaceInCodeOnly(source, namePattern, newName);
             if (!newContent.equals(source)) {
                 entry = editManager.writeFile(entry, file, newContent, null);
                 manager.updateEntry(entry);
@@ -292,4 +295,65 @@ public class RenameSymbolTool extends BaseJavaTool {
     }
 
     private record UnresolvedRef(String file, int line, String context) {}
+
+    private static String replaceInCodeOnly(String source, java.util.regex.Pattern namePattern, String newName) {
+        String[] lines = source.split("\n", -1);
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            String trimmed = line.trim();
+            // Skip comment lines
+            if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")
+                    || trimmed.startsWith("/**") || trimmed.startsWith("*/")) {
+                result.append(line);
+            } else {
+                // Process line, skipping string literals
+                result.append(replaceOutsideStrings(line, namePattern, newName));
+            }
+            if (i < lines.length - 1) result.append("\n");
+        }
+        return result.toString();
+    }
+
+    private static String replaceOutsideStrings(String line, java.util.regex.Pattern namePattern, String newName) {
+        StringBuilder result = new StringBuilder();
+        int i = 0;
+        while (i < line.length()) {
+            char c = line.charAt(i);
+            if (c == '"') {
+                // Copy string literal verbatim
+                result.append(c);
+                i++;
+                while (i < line.length()) {
+                    char sc = line.charAt(i);
+                    result.append(sc);
+                    i++;
+                    if (sc == '\\' && i < line.length()) {
+                        result.append(line.charAt(i));
+                        i++;
+                    } else if (sc == '"') break;
+                }
+            } else if (c == '\'') {
+                // Copy char literal verbatim
+                result.append(c);
+                i++;
+                while (i < line.length()) {
+                    char cc = line.charAt(i);
+                    result.append(cc);
+                    i++;
+                    if (cc == '\\' && i < line.length()) {
+                        result.append(line.charAt(i));
+                        i++;
+                    } else if (cc == '\'') break;
+                }
+            } else {
+                // Code region — collect until next string/char and replace
+                int start = i;
+                while (i < line.length() && line.charAt(i) != '"' && line.charAt(i) != '\'') i++;
+                String codeSegment = line.substring(start, i);
+                result.append(namePattern.matcher(codeSegment).replaceAll(newName));
+            }
+        }
+        return result.toString();
+    }
 }
