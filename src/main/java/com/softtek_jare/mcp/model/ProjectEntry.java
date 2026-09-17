@@ -49,5 +49,6 @@ public record ProjectEntry(
         Path originalProjectDir,
         String originalSource,
         Map<Path, Fingerprint> sourceFingerprints,
-        boolean expired
+        boolean expired,
+        boolean editable
 ) {}

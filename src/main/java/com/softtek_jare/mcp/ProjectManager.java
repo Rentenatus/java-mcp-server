@@ -126,7 +126,7 @@ public class ProjectManager {
             ProjectEntry entry = new ProjectEntry(name, alias, expiryDate,
                     sourceToAnalyze, launcher, model, buildInfo.type().name(),
                     delomboked, lombokVersion,
-                    projectDir, source, buildFingerprints(projectDir), false);
+                    projectDir, source, buildFingerprints(projectDir), false, true);
             entries.put(name, entry);
             LOG.info("Project '{}' loaded successfully ({} types, delomboked={})",
                     name, model.getAllTypes().size(), delomboked);
@@ -213,7 +213,7 @@ public class ProjectManager {
                     entry.projectDir(), entry.launcher(), entry.model(),
                     entry.buildType(), entry.delomboked(), entry.lombokVersion(),
                     entry.originalProjectDir(), entry.originalSource(),
-                    entry.sourceFingerprints(), true));
+                    entry.sourceFingerprints(), true, entry.editable()));
                 LOG.info("Project '{}' expired at {}", entry.name(), entry.expiryDate());
                 newlyExpired.add(entry.name());
             }
