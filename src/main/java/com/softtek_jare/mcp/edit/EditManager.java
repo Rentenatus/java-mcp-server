@@ -196,7 +196,11 @@ public class EditManager {
             for (var entry : pendingChanges.entrySet()) {
                 Path file = entry.getKey();
                 Path temp = file.resolveSibling(file.getFileName() + ".mcp-tmp");
-                Files.writeString(temp, entry.getValue());
+                // Preserve existing line ending
+                String existingContent = Files.exists(file) ? Files.readString(file) : "";
+                String lineEnding = LineEndings.detectLineEnding(existingContent);
+                String adaptedContent = LineEndings.preserveOnWrite(entry.getValue(), lineEnding);
+                Files.writeString(temp, adaptedContent);
                 tempFiles.add(temp);
             }
             // All temp files written successfully — now rename all
