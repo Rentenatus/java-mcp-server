@@ -53,6 +53,10 @@ public class JavaMcpServer {
     private final ProjectManager projectManager = new ProjectManager();
     private final com.softtek_jare.mcp.edit.EditManager editManager = new com.softtek_jare.mcp.edit.EditManager();
 
+    {
+        projectManager.setEditManager(editManager);
+    }
+
 /**
  * Entry point that loads logging configuration and starts the MCP server.
  */

@@ -61,6 +61,7 @@ public class ProjectManager {
     private final BuildDetector buildDetector = new BuildDetector();
     private final LombokDetector lombokDetector = new LombokDetector();
     private final LombokDelomboker lombokDelomboker = new LombokDelomboker();
+    private com.softtek_jare.mcp.edit.EditManager editManager;
 
 /**
  * Loads a Java project with automatic delombok enabled.
@@ -101,6 +102,9 @@ public class ProjectManager {
             projectLoader.cleanup(old.projectDir());
             if (old.delomboked()) {
                 lombokDelomboker.cleanup(old.projectDir());
+            }
+            if (editManager != null) {
+                editManager.resetBackup(name);
             }
             LOG.info("Replaced previously loaded project '{}'", name);
         }
@@ -154,6 +158,10 @@ public class ProjectManager {
             projectLoader.cleanup(projectDir);
             throw new ProjectLoadException("PARSE_ERROR", "Failed to parse project: " + e.getMessage());
         }
+    }
+
+    public void setEditManager(com.softtek_jare.mcp.edit.EditManager editManager) {
+        this.editManager = editManager;
     }
 
 /**
