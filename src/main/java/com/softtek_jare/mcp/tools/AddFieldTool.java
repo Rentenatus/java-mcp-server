@@ -128,6 +128,7 @@ public class AddFieldTool extends BaseJavaTool {
         String newContent = source.substring(0, lastBrace)
                 + "    " + fieldSrc + "\n"
                 + source.substring(lastBrace);
+        newContent = insertImports(newContent, importResult.importsToAdd());
 
         entry = editManager.writeFile(entry, file, newContent, null);
         manager.updateEntry(entry);

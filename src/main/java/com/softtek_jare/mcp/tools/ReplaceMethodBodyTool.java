@@ -144,6 +144,7 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
 
         String source = Files.readString(file);
         String newContent = replaceBodyInSource(source, bodyStartLine, bodyEndLine, newBody);
+        newContent = insertImports(newContent, importResult.importsToAdd());
         entry = editManager.writeFile(entry, file, newContent, null);
         manager.updateEntry(entry);
 

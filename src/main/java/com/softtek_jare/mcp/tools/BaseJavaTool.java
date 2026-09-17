@@ -219,6 +219,42 @@ public abstract class BaseJavaTool implements McpTool {
     }
 
 /**
+ * Inserts import statements before the first class/interface/enum declaration in the source.
+ */
+    protected static String insertImports(String source, List<String> importsToAdd) {
+        if (importsToAdd == null || importsToAdd.isEmpty()) return source;
+        StringBuilder importBlock = new StringBuilder();
+        for (String fqn : importsToAdd) {
+            importBlock.append("import ").append(fqn).append(";\n");
+        }
+        // Find insertion point: after package declaration and existing imports, before first type
+        int insertIdx = 0;
+        String[] lines = source.split("\n", -1);
+        boolean foundPackage = false;
+        for (int i = 0; i < lines.length; i++) {
+            String t = lines[i].trim();
+            if (t.startsWith("package ")) { foundPackage = true; insertIdx = i + 1; continue; }
+            if (t.startsWith("import ")) { insertIdx = i + 1; continue; }
+            if (foundPackage || i > 0) {
+                // Skip blank lines after package/imports
+                if (t.isEmpty() && i == insertIdx) { insertIdx = i + 1; continue; }
+                break;
+            }
+        }
+        // Insert import block at insertIdx
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < lines.length; i++) {
+            if (i == insertIdx) {
+                result.append(importBlock);
+                result.append("\n");
+            }
+            result.append(lines[i]);
+            if (i < lines.length - 1) result.append("\n");
+        }
+        return result.toString();
+    }
+
+/**
  * Formats an expiry warning for newly expired projects.
  */
     protected static String formatExpiredWarning(List<String> expiredNames) {

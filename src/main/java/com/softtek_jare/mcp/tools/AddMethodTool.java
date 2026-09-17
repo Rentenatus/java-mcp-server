@@ -107,8 +107,9 @@ public class AddMethodTool extends BaseJavaTool {
         }
 
         // Auto-import resolution for body
+        var importResult = new com.softtek_jare.mcp.edit.AutoImportResolver.Result(java.util.List.of(), java.util.List.of());
         if (body != null && !body.isBlank()) {
-            var importResult = new AutoImportResolver().resolve(entry, targetType, body);
+            importResult = new AutoImportResolver().resolve(entry, targetType, body);
             if (!importResult.unresolvedTypes().isEmpty()) {
                 return error("Cannot resolve type(s) in method body: " + importResult.unresolvedTypes()
                         + ". Provide the fully qualified name or add the dependency.");
@@ -143,6 +144,9 @@ public class AddMethodTool extends BaseJavaTool {
         String newContent = source.substring(0, lastBrace)
                 + "    " + methodSrc + "\n"
                 + source.substring(lastBrace);
+        if (body != null && !body.isBlank()) {
+            newContent = insertImports(newContent, importResult.importsToAdd());
+        }
 
         entry = editManager.writeFile(entry, file, newContent, null);
         manager.updateEntry(entry);
