@@ -32,6 +32,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
@@ -119,7 +120,8 @@ public class ProjectManager {
 
             ProjectEntry entry = new ProjectEntry(name, alias, expiryDate,
                     sourceToAnalyze, launcher, model, buildInfo.type().name(),
-                    delomboked, lombokVersion);
+                    delomboked, lombokVersion,
+                    projectDir, source, Map.of(), false);
             entries.put(name, entry);
             LOG.info("Project '{}' loaded successfully ({} types, delomboked={})",
                     name, model.getAllTypes().size(), delomboked);
