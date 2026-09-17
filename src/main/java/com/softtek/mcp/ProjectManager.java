@@ -36,6 +36,8 @@ import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.io.IOException;
+import com.softtek.mcp.model.Fingerprint;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -123,7 +125,7 @@ public class ProjectManager {
             ProjectEntry entry = new ProjectEntry(name, alias, expiryDate,
                     sourceToAnalyze, launcher, model, buildInfo.type().name(),
                     delomboked, lombokVersion,
-                    projectDir, source, Map.of(), false);
+                    projectDir, source, buildFingerprints(projectDir), false);
             entries.put(name, entry);
             LOG.info("Project '{}' loaded successfully ({} types, delomboked={})",
                     name, model.getAllTypes().size(), delomboked);
@@ -191,6 +193,30 @@ public class ProjectManager {
             }
         }
         return newlyExpired;
+    }
+
+/**
+ * Builds a fingerprint map for all .java files under the given source root.
+ */
+    private static Map<java.nio.file.Path, Fingerprint> buildFingerprints(java.nio.file.Path sourceRoot) {
+        Map<java.nio.file.Path, Fingerprint> fingerprints = new java.util.HashMap<>();
+        if (sourceRoot == null || !Files.isDirectory(sourceRoot)) return fingerprints;
+        try (var stream = Files.walk(sourceRoot)) {
+            stream.filter(Files::isRegularFile)
+                  .filter(p -> p.toString().endsWith(".java"))
+                  .forEach(p -> {
+                      try {
+                          long mod = Files.getLastModifiedTime(p).toMillis();
+                          long size = Files.size(p);
+                          fingerprints.put(p.normalize(), new Fingerprint(mod, size));
+                      } catch (IOException e) {
+                          LOG.warn("Could not fingerprint {}: {}", p, e.getMessage());
+                      }
+                  });
+        } catch (IOException e) {
+            LOG.warn("Could not walk source root for fingerprints: {}", e.getMessage());
+        }
+        return fingerprints;
     }
 
 /**
