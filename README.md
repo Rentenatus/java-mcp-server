@@ -102,7 +102,7 @@ Add to `~/.vibe/config.toml`:
 name = "my-mcp-server"
 transport = "stdio"
 command = "java"
-args = ["-jar", "/path/to/java-mcp-server-standalone.jar"]
+args = ["-jar", "D:/git_java-mcp-server/target/java-mcp-server-standalone.jar"]
 ```
 
 Or add non-interactively from the shell:
@@ -111,7 +111,7 @@ Or add non-interactively from the shell:
 vibe mcp add my-mcp-server \
   --transport stdio \
   --command java \
-  --args '["-jar", "/path/to/java-mcp-server-standalone.jar"]'
+  --args '["-jar", "D:/git_java-mcp-server/target/java-mcp-server-standalone.jar"]'
 ```
 
 Or from inside Vibe:
