@@ -88,6 +88,8 @@ public class InspectFieldTool extends BaseJavaTool {
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Class not found: " + className));
 
+        String dirtyWarning = formatDirtyWarning(checkDirty(entry, List.of(type)));
+
         var field = type.getFields().stream()
                 .filter(f -> f.getSimpleName().equals(fieldName))
                 .findFirst()
@@ -128,6 +130,7 @@ public class InspectFieldTool extends BaseJavaTool {
             }
         }
 
+        sb.insert(0, dirtyWarning);
         return ok(sb);
     }
 }

@@ -87,6 +87,8 @@ public class InspectClassTool extends BaseJavaTool {
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Class not found: " + className));
 
+        String dirtyWarning = formatDirtyWarning(checkDirty(entry, List.of(type)));
+
         StringBuilder sb = new StringBuilder();
         sb.append("# ").append(type.getQualifiedName()).append("\n\n");
 
@@ -177,6 +179,7 @@ public class InspectClassTool extends BaseJavaTool {
             }
         }
 
+        sb.insert(0, dirtyWarning);
         return ok(sb);
     }
 }
