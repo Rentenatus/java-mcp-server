@@ -195,10 +195,24 @@ public class RemoveMemberTool extends BaseJavaTool {
         if (startLine < 1 || endLine < startLine) return source;
         String[] lines = source.split("\n", -1);
         int startIdx = startLine - 1; // 0-indexed
+
+        // Walk backwards to include Javadoc/comments above the method
+        int commentStart = startIdx;
+        for (int i = startIdx - 1; i >= 0; i--) {
+            String trimmed = lines[i].trim();
+            if (trimmed.isEmpty()) break;
+            if (trimmed.startsWith("/**") || trimmed.startsWith("*") || trimmed.startsWith("*/")
+                    || trimmed.startsWith("//") || trimmed.startsWith("/*")) {
+                commentStart = i;
+            } else {
+                break;
+            }
+        }
+
         int endIdx = Math.min(endLine, lines.length); // exclusive
         StringBuilder result = new StringBuilder();
         for (int i = 0; i < lines.length; i++) {
-            if (i >= startIdx && i < endIdx) continue; // skip method lines
+            if (i >= commentStart && i < endIdx) continue; // skip method + comments
             result.append(lines[i]);
             if (i < lines.length - 1) result.append("\n");
         }
