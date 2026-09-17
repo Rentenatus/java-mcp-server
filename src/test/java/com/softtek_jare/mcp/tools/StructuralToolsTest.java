@@ -96,7 +96,7 @@ class StructuralToolsTest {
     void addPackageCreatesDirectory() throws Exception {
         Files.writeString(srcDir.resolve("X.java"), "class X {}");
         ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
-        AddPackageTool tool = new AddPackageTool(mgr);
+        AddPackageTool tool = new AddPackageTool(mgr, new com.softtek_jare.mcp.edit.EditManager());
 
         CallToolResult result = tool.handle(null, reqPkg(entry.name(), "com.example.service", false));
 
@@ -109,7 +109,7 @@ class StructuralToolsTest {
     void addPackageWithPackageInfo() throws Exception {
         Files.writeString(srcDir.resolve("X.java"), "class X {}");
         ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
-        AddPackageTool tool = new AddPackageTool(mgr);
+        AddPackageTool tool = new AddPackageTool(mgr, new com.softtek_jare.mcp.edit.EditManager());
 
         CallToolResult result = tool.handle(null, reqPkg(entry.name(), "com.test", true));
 
@@ -122,7 +122,7 @@ class StructuralToolsTest {
     void addClassCreatesFile() throws Exception {
         Files.writeString(srcDir.resolve("X.java"), "class X {}");
         ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
-        AddClassTool tool = new AddClassTool(mgr);
+        AddClassTool tool = new AddClassTool(mgr, new com.softtek_jare.mcp.edit.EditManager());
 
         CallToolResult result = tool.handle(null, reqClass(entry.name(), "com.example", "MyService", "interface", null));
 
@@ -140,7 +140,7 @@ class StructuralToolsTest {
         Path existing = srcDir.resolve("Existing.java");
         Files.writeString(existing, "class Existing {}");
         ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
-        AddClassTool tool = new AddClassTool(mgr);
+        AddClassTool tool = new AddClassTool(mgr, new com.softtek_jare.mcp.edit.EditManager());
 
         CallToolResult result = tool.handle(null, reqClass(entry.name(), "", "Existing", "class", null));
 

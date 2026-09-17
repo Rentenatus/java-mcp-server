@@ -43,8 +43,11 @@ import java.util.Map;
  */
 public class AddPackageTool extends BaseJavaTool {
 
-    public AddPackageTool(ProjectManager manager) {
+    private final EditManager editManager;
+
+    public AddPackageTool(ProjectManager manager, EditManager editManager) {
         super(manager);
+        this.editManager = editManager;
     }
 
     @Override protected String toolName() { return "add_package"; }
@@ -81,9 +84,12 @@ public class AddPackageTool extends BaseJavaTool {
 
         if (genInfo) {
             Path infoFile = packageDir.resolve("package-info.java");
-            Files.writeString(infoFile, "package " + packageName + ";\n\n");
+            String infoContent = "package " + packageName + ";\n\n";
+            entry = editManager.writeFile(entry, infoFile, infoContent, null);
+            manager.updateEntry(entry);
+        } else {
+            manager.markDirty(name);
         }
-        manager.markDirty(name);
 
         return ok("Package created: " + packageName + " at " + packageDir
                 + (genInfo ? " (with package-info.java)" : "")

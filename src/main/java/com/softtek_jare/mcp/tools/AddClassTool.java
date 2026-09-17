@@ -30,6 +30,7 @@ import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 
 import com.softtek_jare.mcp.ProjectManager;
 import com.softtek_jare.mcp.edit.AutoImportResolver;
+import com.softtek_jare.mcp.edit.EditManager;
 import com.softtek_jare.mcp.model.ProjectEntry;
 
 import java.nio.file.Files;
@@ -43,8 +44,11 @@ import java.util.Map;
  */
 public class AddClassTool extends BaseJavaTool {
 
-    public AddClassTool(ProjectManager manager) {
+    private final EditManager editManager;
+
+    public AddClassTool(ProjectManager manager, EditManager editManager) {
         super(manager);
+        this.editManager = editManager;
     }
 
     @Override protected String toolName() { return "add_class"; }
@@ -104,8 +108,8 @@ public class AddClassTool extends BaseJavaTool {
         }
         src.append("}\n");
 
-        Files.writeString(file, src.toString());
-        manager.markDirty(name);
+        entry = editManager.writeFile(entry, file, src.toString(), null);
+        manager.updateEntry(entry);
 
         return ok("Class created: " + packageName + "." + className + " at " + file
                 + "\n" + formatMultiModuleWarning(entry));
