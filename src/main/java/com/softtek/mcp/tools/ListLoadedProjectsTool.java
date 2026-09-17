@@ -37,6 +37,7 @@ import java.util.Map;
  * The {@code ListLoadedProjectsTool} class.
  *
  * @author Alejandro Ferreira
+ * @author Janusch Rentenatus
  */
 public class ListLoadedProjectsTool extends BaseJavaTool {
 
@@ -84,6 +85,9 @@ public class ListLoadedProjectsTool extends BaseJavaTool {
             sb.append(" — ").append(types).append(" types, build: ").append(entry.buildType());
             if (entry.expiryDate() != null) {
                 sb.append(" [expires: ").append(entry.expiryDate()).append("]");
+            if (entry.expired()) {
+                sb.append(" **[EXPIRED]**");
+            }
             }
             sb.append("\n");
         }

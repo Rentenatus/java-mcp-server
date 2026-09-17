@@ -32,7 +32,12 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
+import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.io.IOException;
+import com.softtek.mcp.model.Fingerprint;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,6 +50,7 @@ import spoon.reflect.CtModel;
  * The {@code ProjectManager} class.
  *
  * @author Alejandro Ferreira
+ * @author Janusch Rentenatus
  */
 public class ProjectManager {
 
@@ -68,7 +74,7 @@ public class ProjectManager {
  */
     public ProjectEntry load(String source, String alias, Instant expiryDate, boolean autoDelombok)
             throws ProjectLoadException {
-        removeExpired();
+        markExpired();
 
         if (expiryDate == null) {
             expiryDate = Instant.now().plus(10, ChronoUnit.MINUTES);
@@ -119,7 +125,8 @@ public class ProjectManager {
 
             ProjectEntry entry = new ProjectEntry(name, alias, expiryDate,
                     sourceToAnalyze, launcher, model, buildInfo.type().name(),
-                    delomboked, lombokVersion);
+                    delomboked, lombokVersion,
+                    projectDir, source, buildFingerprints(projectDir), false);
             entries.put(name, entry);
             LOG.info("Project '{}' loaded successfully ({} types, delomboked={})",
                     name, model.getAllTypes().size(), delomboked);
@@ -137,13 +144,37 @@ public class ProjectManager {
  * Finds a loaded project by name or alias.
  */
     public ProjectEntry find(String nameOrAlias) {
-        removeExpired();
         for (ProjectEntry entry : entries.values()) {
             if (entry.alias() != null && entry.alias().equals(nameOrAlias)) {
                 return entry;
             }
         }
         return entries.get(nameOrAlias);
+    }
+
+/**
+ * Reloads a single project from its stored original source.
+ */
+    public ProjectEntry reload(String nameOrAlias) throws ProjectLoadException {
+        ProjectEntry old = find(nameOrAlias);
+        if (old == null) {
+            throw new ProjectLoadException("NOT_FOUND",
+                "No project found with name or alias '" + nameOrAlias + "'. Call load_java_project first.");
+        }
+        return load(old.originalSource(), old.alias(), null, old.delomboked());
+    }
+
+/**
+ * Reloads all expired projects from their stored original sources.
+ */
+    public List<ProjectEntry> reloadExpired() throws ProjectLoadException {
+        List<ProjectEntry> reloaded = new ArrayList<>();
+        for (var entry : new ArrayList<>(entries.values())) {
+            if (entry.expired()) {
+                reloaded.add(load(entry.originalSource(), entry.alias(), null, entry.delomboked()));
+            }
+        }
+        return reloaded;
     }
 
 /**
@@ -165,26 +196,53 @@ public class ProjectManager {
  * Returns all currently loaded projects.
  */
     public Collection<ProjectEntry> list() {
-        removeExpired();
         return entries.values();
     }
 
 /**
- * Removes all projects whose expiry date has passed.
+ * Marks all projects whose expiry date has passed as expired (without deleting them).
+ * Returns the names of newly expired projects for agent notification.
  */
-    private void removeExpired() {
+    public List<String> markExpired() {
         Instant now = Instant.now();
-        entries.values().removeIf(entry -> {
-            if (entry.expiryDate() != null && now.isAfter(entry.expiryDate())) {
-                LOG.info("Removing expired project '{}' (expired at {})", entry.name(), entry.expiryDate());
-                projectLoader.cleanup(entry.projectDir());
-                if (entry.delomboked()) {
-                    lombokDelomboker.cleanup(entry.projectDir());
-                }
-                return true;
+        List<String> newlyExpired = new ArrayList<>();
+        for (var entry : entries.values()) {
+            if (!entry.expired() && entry.expiryDate() != null && now.isAfter(entry.expiryDate())) {
+                entries.put(entry.name(), new ProjectEntry(
+                    entry.name(), entry.alias(), entry.expiryDate(),
+                    entry.projectDir(), entry.launcher(), entry.model(),
+                    entry.buildType(), entry.delomboked(), entry.lombokVersion(),
+                    entry.originalProjectDir(), entry.originalSource(),
+                    entry.sourceFingerprints(), true));
+                LOG.info("Project '{}' expired at {}", entry.name(), entry.expiryDate());
+                newlyExpired.add(entry.name());
             }
-            return false;
-        });
+        }
+        return newlyExpired;
+    }
+
+/**
+ * Builds a fingerprint map for all .java files under the given source root.
+ */
+    private static Map<java.nio.file.Path, Fingerprint> buildFingerprints(java.nio.file.Path sourceRoot) {
+        Map<java.nio.file.Path, Fingerprint> fingerprints = new java.util.HashMap<>();
+        if (sourceRoot == null || !Files.isDirectory(sourceRoot)) return fingerprints;
+        try (var stream = Files.walk(sourceRoot)) {
+            stream.filter(Files::isRegularFile)
+                  .filter(p -> p.toString().endsWith(".java"))
+                  .forEach(p -> {
+                      try {
+                          long mod = Files.getLastModifiedTime(p).toMillis();
+                          long size = Files.size(p);
+                          fingerprints.put(p.normalize(), new Fingerprint(mod, size));
+                      } catch (IOException e) {
+                          LOG.warn("Could not fingerprint {}: {}", p, e.getMessage());
+                      }
+                  });
+        } catch (IOException e) {
+            LOG.warn("Could not walk source root for fingerprints: {}", e.getMessage());
+        }
+        return fingerprints;
     }
 
 /**

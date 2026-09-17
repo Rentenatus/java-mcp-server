@@ -40,6 +40,7 @@ import java.util.stream.Collectors;
  * The {@code InspectClassTool} class.
  *
  * @author Alejandro Ferreira
+ * @author Janusch Rentenatus
  */
 public class InspectClassTool extends BaseJavaTool {
 
@@ -86,6 +87,8 @@ public class InspectClassTool extends BaseJavaTool {
                 .filter(t -> t.getQualifiedName().equals(className))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Class not found: " + className));
+
+        String dirtyWarning = formatDirtyWarning(checkDirty(entry, List.of(type)));
 
         StringBuilder sb = new StringBuilder();
         sb.append("# ").append(type.getQualifiedName()).append("\n\n");
@@ -177,6 +180,7 @@ public class InspectClassTool extends BaseJavaTool {
             }
         }
 
+        sb.insert(0, dirtyWarning);
         return ok(sb);
     }
 }

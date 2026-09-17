@@ -39,6 +39,7 @@ import java.util.stream.Collectors;
  * The {@code ListMethodsTool} class.
  *
  * @author Alejandro Ferreira
+ * @author Janusch Rentenatus
  */
 public class ListMethodsTool extends BaseJavaTool {
 
@@ -130,6 +131,17 @@ public class ListMethodsTool extends BaseJavaTool {
             }
         }
 
+        // Scoped dirty check
+        if (className != null && !className.isBlank()) {
+            var checkType = entry.model().getAllTypes().stream()
+                .filter(t -> t.getQualifiedName().equals(className))
+                .findFirst().orElse(null);
+            if (checkType != null) {
+                sb.insert(0, formatDirtyWarning(checkDirty(entry, List.of(checkType))));
+            }
+        } else {
+            sb.insert(0, formatDirtyWarning(checkDirty(entry, entry.model().getAllTypes().stream().toList())));
+        }
         return ok(sb);
     }
 

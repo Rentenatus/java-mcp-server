@@ -24,30 +24,10 @@
 
 package com.softtek.mcp.model;
 
-import java.nio.file.Path;
-import java.time.Instant;
-import java.util.Map;
-
-import spoon.Launcher;
-import spoon.reflect.CtModel;
-
 /**
- * The {@code ProjectEntry} record.
+ * Immutable fingerprint of a source file, based on OS-level metadata only
+ * (last-modified timestamp and file size). No file content is read.
  *
  * @author Janusch Rentenatus
  */
-public record ProjectEntry(
-        String name,
-        String alias,
-        Instant expiryDate,
-        Path projectDir,
-        Launcher launcher,
-        CtModel model,
-        String buildType,
-        boolean delomboked,
-        String lombokVersion,
-        Path originalProjectDir,
-        String originalSource,
-        Map<Path, Fingerprint> sourceFingerprints,
-        boolean expired
-) {}
+public record Fingerprint(long lastModified, long fileSize) {}

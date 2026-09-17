@@ -46,6 +46,7 @@ import org.yaml.snakeyaml.Yaml;
  * The {@code JavaMcpServer} class.
  *
  * @author Alejandro Ferreira
+ * @author Janusch Rentenatus
  */
 public class JavaMcpServer {
 
@@ -124,7 +125,9 @@ public class JavaMcpServer {
                 new GetAnnotationDetailsTool(projectManager).build(),
                 new ListMethodsByReturnTypeTool(projectManager).build(),
                 new ListMethodInvocationsTool(projectManager).build(),
-                new FindReferencesTool(projectManager).build()
+                new FindReferencesTool(projectManager).build(),
+                new CheckProjectDirtyTool(projectManager).build(),
+                new ReloadJavaProjectTool(projectManager).build()
         );
 
         McpJsonMapper jsonMapper = new JacksonMcpJsonMapperSupplier().get();

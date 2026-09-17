@@ -24,30 +24,44 @@
 
 package com.softtek.mcp.model;
 
-import java.nio.file.Path;
-import java.time.Instant;
-import java.util.Map;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import spoon.Launcher;
-import spoon.reflect.CtModel;
+import org.junit.jupiter.api.Test;
 
 /**
- * The {@code ProjectEntry} record.
+ * Tests for the {@link Fingerprint} record.
  *
  * @author Janusch Rentenatus
  */
-public record ProjectEntry(
-        String name,
-        String alias,
-        Instant expiryDate,
-        Path projectDir,
-        Launcher launcher,
-        CtModel model,
-        String buildType,
-        boolean delomboked,
-        String lombokVersion,
-        Path originalProjectDir,
-        String originalSource,
-        Map<Path, Fingerprint> sourceFingerprints,
-        boolean expired
-) {}
+class FingerprintTest {
+
+    @Test
+    void equalsAndHashCodeWork() {
+        Fingerprint a = new Fingerprint(1000L, 200L);
+        Fingerprint b = new Fingerprint(1000L, 200L);
+        Fingerprint c = new Fingerprint(1001L, 200L);
+        Fingerprint d = new Fingerprint(1000L, 201L);
+
+        assertEquals(a, b);
+        assertEquals(a.hashCode(), b.hashCode());
+        assertNotEquals(a, c);
+        assertNotEquals(a, d);
+    }
+
+    @Test
+    void accessorsReturnValues() {
+        Fingerprint fp = new Fingerprint(42L, 99L);
+        assertEquals(42L, fp.lastModified());
+        assertEquals(99L, fp.fileSize());
+    }
+
+    @Test
+    void toStringContainsValues() {
+        Fingerprint fp = new Fingerprint(100L, 200L);
+        String s = fp.toString();
+        assertTrue(s.contains("100"));
+        assertTrue(s.contains("200"));
+    }
+}
