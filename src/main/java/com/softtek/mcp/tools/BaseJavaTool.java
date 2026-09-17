@@ -204,6 +204,19 @@ public abstract class BaseJavaTool implements McpTool {
     }
 
 /**
+ * Builds a three-property schema map with descriptions.
+ */
+    protected static Map<String, Object> propsWithDescription(String k1, String t1, String d1,
+                                                                String k2, String t2, String d2,
+                                                                String k3, String t3, String d3) {
+        return Map.of(
+            k1, Map.of("type", t1, "description", d1),
+            k2, Map.of("type", t2, "description", d2),
+            k3, Map.of("type", t3, "description", d3)
+        );
+    }
+
+/**
  * Builds a list of required argument keys.
  */
     protected static List<String> req(String... keys) {

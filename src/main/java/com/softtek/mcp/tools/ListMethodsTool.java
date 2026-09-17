@@ -63,7 +63,8 @@ public class ListMethodsTool extends BaseJavaTool {
     @Override protected Map<String, Object> toolProperties() {
         return propsWithDescription(
                 "name", "string", "Project name or alias",
-                "className", "string", "Optional: fully qualified class name");
+                "className", "string", "Optional: fully qualified class name",
+                "withJavadoc", "boolean", "If true (default), includes a one-line Javadoc summary per method");
     }
 /**
  * Returns the list of required argument keys for this tool.
@@ -77,6 +78,8 @@ public class ListMethodsTool extends BaseJavaTool {
     protected CallToolResult handle(McpSyncServerExchange exchange, CallToolRequest request) {
         String name = arg(request, "name");
         String className = arg(request, "className");
+        Boolean wj = (Boolean) request.arguments().get("withJavadoc");
+        boolean withJavadoc = (wj == null) || wj;
         var entry = findEntry(name);
 
         StringBuilder sb = new StringBuilder("# Methods");
@@ -103,6 +106,10 @@ public class ListMethodsTool extends BaseJavaTool {
                 else if (method.isPrivate()) sb.append(" `private`");
                 if (method.isStatic()) sb.append(" `static`");
                 sb.append("\n");
+                if (withJavadoc) {
+                    String summary = extractSummary(method.getDocComment());
+                    if (summary != null) sb.append("  > ").append(summary).append("\n");
+                }
             }
         } else {
             sb.append(" (").append(entry.name()).append(")\n\n");
@@ -115,10 +122,29 @@ public class ListMethodsTool extends BaseJavaTool {
                             .collect(Collectors.joining(", "));
                     sb.append("- `").append(type.getQualifiedName()).append(".")
                       .append(method.getSimpleName()).append("(").append(params).append(")`\n");
+                    if (withJavadoc) {
+                        String summary = extractSummary(method.getDocComment());
+                        if (summary != null) sb.append("  > ").append(summary).append("\n");
+                    }
                 }
             }
         }
 
         return ok(sb);
     }
+
+/**
+ * Extracts the first non-empty, non-annotation line from a Javadoc comment as a summary.
+ */
+    private static String extractSummary(String docComment) {
+        if (docComment == null || docComment.isBlank()) return null;
+        for (String raw : docComment.split("\n")) {
+            String t = raw.trim();
+            if (t.startsWith("*")) t = t.substring(1).trim();
+            if (t.isEmpty() || t.startsWith("@")) continue;
+            return t;
+        }
+        return null;
+    }
+
 }

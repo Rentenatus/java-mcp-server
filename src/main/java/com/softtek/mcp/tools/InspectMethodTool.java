@@ -63,7 +63,8 @@ public class InspectMethodTool extends BaseJavaTool {
         return Map.of(
             "name", Map.of("type", "string", "description", "Project name or alias"),
             "className", Map.of("type", "string", "description", "Fully qualified class name"),
-            "methodName", Map.of("type", "string", "description", "Method name")
+            "methodName", Map.of("type", "string", "description", "Method name"),
+            "withJavadoc", Map.of("type", "boolean", "description", "If true (default), includes the Javadoc comment in the output")
         );
     }
 /**
@@ -79,6 +80,8 @@ public class InspectMethodTool extends BaseJavaTool {
         String name = arg(request, "name");
         String className = arg(request, "className");
         String methodName = arg(request, "methodName");
+        Boolean wj = (Boolean) request.arguments().get("withJavadoc");
+        boolean withJavadoc = (wj == null) || wj;
         var entry = findEntry(name);
 
         var type = entry.model().getAllTypes().stream()
@@ -112,6 +115,16 @@ public class InspectMethodTool extends BaseJavaTool {
             if (method.isAbstract()) sb.append("abstract ");
             sb.append(retType).append(" ").append(methodName).append("(").append(params).append(")");
             sb.append("\n```\n\n");
+
+            if (withJavadoc) {
+                String doc = method.getDocComment();
+                if (doc != null && !doc.isBlank()) {
+                    sb.append("## Javadoc\n\n");
+                    sb.append("```\n");
+                    sb.append(doc.stripIndent().strip());
+                    sb.append("\n```\n\n");
+                }
+            }
 
             sb.append("| Property | Value |\n");
             sb.append("|----------|-------|\n");
