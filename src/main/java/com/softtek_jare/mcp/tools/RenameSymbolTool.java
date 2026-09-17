@@ -121,6 +121,20 @@ public class RenameSymbolTool extends BaseJavaTool {
             }
         }
 
+        // For class renames, rename the source file to match the new class name
+        if ("class".equals(scope)) {
+            Path oldFile = targetType.getPosition().getFile() != null
+                    ? targetType.getPosition().getFile().toPath() : null;
+            if (oldFile != null) {
+                Path newFile = oldFile.resolveSibling(newName + ".java");
+                if (!oldFile.equals(newFile) && Files.exists(oldFile)) {
+                    Files.move(oldFile, newFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    entry = editManager.writeFile(entry, newFile, Files.readString(newFile), null);
+                    manager.updateEntry(entry);
+                }
+            }
+        }
+
         // Scan for unresolved string-literal references
         List<UnresolvedRef> unresolved = scanUnresolvedReferences(entry, oldName);
 
