@@ -141,7 +141,11 @@ public class JavaMcpServer {
                 new RewriteSignatureTool(projectManager, editManager).build(),
                 new AddPackageTool(projectManager).build(),
                 new AddClassTool(projectManager).build(),
-                new MoveClassTool(projectManager, editManager).build()
+                new MoveClassTool(projectManager, editManager).build(),
+                new TransactionTools.Begin(projectManager, editManager).build(),
+                new TransactionTools.Commit(projectManager, editManager).build(),
+                new TransactionTools.Rollback(projectManager, editManager).build(),
+                new TransactionTools.GetEditSummary(projectManager, editManager).build()
         );
 
         McpJsonMapper jsonMapper = new JacksonMcpJsonMapperSupplier().get();

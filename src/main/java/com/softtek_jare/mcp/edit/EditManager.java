@@ -32,7 +32,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.slf4j.Logger;
@@ -53,6 +55,9 @@ public class EditManager {
 
     private final Path backupDir;
     private final Map<String, Boolean> backedUp = new HashMap<>();
+    private boolean inTransaction = false;
+    private final Map<Path, String> pendingChanges = new HashMap<>();
+    private final List<String> editLog = new ArrayList<>();
 
     /**
      * Creates an EditManager with backup directory under the user home.
@@ -93,6 +98,12 @@ public class EditManager {
 
         // 2. Optimistic lock check
         BaseJavaTool.validateFingerprint(entry, file, expectedFingerprint);
+
+        // If in transaction, accumulate changes in memory
+        if (inTransaction) {
+            pendingChanges.put(file.normalize(), newContent);
+            return entry; // no fingerprint update until commit
+        }
 
         // 3. Detect existing line ending and preserve it
         String existingContent = Files.exists(file) ? Files.readString(file) : "";
@@ -164,5 +175,67 @@ public class EditManager {
      */
     public void resetBackup(String projectName) {
         backedUp.remove(projectName);
+    }
+
+    // --- Transaction Layer ---
+
+    public void beginTransaction() {
+        inTransaction = true;
+        pendingChanges.clear();
+    }
+
+    public boolean isInTransaction() {
+        return inTransaction;
+    }
+
+    /**
+     * Commits all pending changes atomically: writes to temp files, then renames.
+     * On any failure, all temp files are cleaned up and the transaction remains open.
+     */
+    public boolean commitTransaction() throws IOException {
+        if (!inTransaction) return true;
+        // Write all pending files to temp, then rename all
+        List<Path> tempFiles = new ArrayList<>();
+        try {
+            for (var entry : pendingChanges.entrySet()) {
+                Path file = entry.getKey();
+                Path temp = file.resolveSibling(file.getFileName() + ".mcp-tmp");
+                Files.writeString(temp, entry.getValue());
+                tempFiles.add(temp);
+            }
+            // All temp files written successfully — now rename all
+            for (var entry : pendingChanges.entrySet()) {
+                Path file = entry.getKey();
+                Path temp = file.resolveSibling(file.getFileName() + ".mcp-tmp");
+                Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            }
+        } catch (IOException e) {
+            // Cleanup all temp files
+            for (Path temp : tempFiles) Files.deleteIfExists(temp);
+            // Transaction remains open
+            return false;
+        }
+        pendingChanges.clear();
+        inTransaction = false;
+        return true;
+    }
+
+    public void rollbackTransaction() {
+        pendingChanges.clear();
+        inTransaction = false;
+    }
+
+    // --- Edit Summary ---
+
+    public void logEdit(String description) {
+        editLog.add(description);
+    }
+
+    public List<String> getEditLog() {
+        return new ArrayList<>(editLog);
+    }
+
+    public int getPendingChangeCount() {
+        return pendingChanges.size();
     }
 }
