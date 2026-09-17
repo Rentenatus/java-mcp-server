@@ -148,6 +148,18 @@ public abstract class BaseJavaTool implements McpTool {
     }
 
 /**
+ * Checks that the project is editable; throws if not.
+ */
+    protected ProjectEntry requireEditable(ProjectEntry entry) {
+        if (!entry.editable()) {
+            throw new IllegalArgumentException(
+                    "Project '" + entry.name() + "' is read-only (loaded from JAR or with editable=false). "
+                    + "Edit tools are not available.");
+        }
+        return entry;
+    }
+
+/**
  * Formats an expiry warning for newly expired projects.
  */
     protected static String formatExpiredWarning(List<String> expiredNames) {
