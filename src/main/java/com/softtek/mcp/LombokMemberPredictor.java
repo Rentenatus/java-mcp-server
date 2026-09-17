@@ -1,3 +1,27 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2026 Alejandro Ferreira
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 package com.softtek.mcp;
 
 import java.util.ArrayList;
@@ -17,6 +41,8 @@ import spoon.reflect.factory.TypeFactory;
  * a project is loaded with delombok disabled (or delombok failed). It inspects
  * Lombok annotations on a type and reports which members Lombok would have
  * generated, even though they are NOT present in the AST.
+ *
+ * @author Alejandro Ferreira
  */
 public final class LombokMemberPredictor {
 
@@ -31,8 +57,14 @@ public final class LombokMemberPredictor {
 
     public record PredictedMember(String kind, String signature) {}
 
+/**
+ * Private constructor to prevent instantiation.
+ */
     private LombokMemberPredictor() {}
 
+/**
+ * Predicts which members Lombok would generate for the given type based on its annotations.
+ */
     public static List<PredictedMember> predict(CtType<?> type) {
         if (type == null) return List.of();
         List<PredictedMember> out = new ArrayList<>();
@@ -121,6 +153,9 @@ public final class LombokMemberPredictor {
         return out;
     }
 
+/**
+ * Checks whether the given type or any of its fields has Lombok annotations.
+ */
     public static boolean hasLombokAnnotations(CtType<?> type) {
         if (type == null) return false;
         if (!collectAnnotationNames(type).isEmpty()) return true;
@@ -130,30 +165,45 @@ public final class LombokMemberPredictor {
         return false;
     }
 
+/**
+ * Collects the simple names of all annotations on the given type.
+ */
     private static Set<String> collectAnnotationNames(CtType<?> type) {
         return type.getAnnotations().stream()
                 .map(a -> a.getAnnotationType().getSimpleName())
                 .collect(java.util.stream.Collectors.toSet());
     }
 
+/**
+ * Collects the simple names of all annotations on the given field.
+ */
     private static Set<String> collectAnnotationNames(CtField<?> field) {
         return field.getAnnotations().stream()
                 .map(a -> a.getAnnotationType().getSimpleName())
                 .collect(java.util.stream.Collectors.toSet());
     }
 
+/**
+ * Returns all non-static instance fields of the given type.
+ */
     private static List<CtField<?>> allInstanceFields(CtType<?> type) {
         return type.getFields().stream()
                 .filter(f -> !f.hasModifier(ModifierKind.STATIC))
                 .toList();
     }
 
+/**
+ * Returns all final instance fields of the given type.
+ */
     private static List<CtField<?>> finalNonNullFields(CtType<?> type) {
         return allInstanceFields(type).stream()
                 .filter(f -> f.hasModifier(ModifierKind.FINAL))
                 .toList();
     }
 
+/**
+ * Capitalizes the first character of a string, with special handling for boolean {@code is} prefixes.
+ */
     private static String capitalize(String s) {
         if (s == null || s.isEmpty()) return s;
         if (s.length() > 1 && s.startsWith("is") && Character.isUpperCase(s.charAt(2))) {

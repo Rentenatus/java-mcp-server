@@ -1,3 +1,27 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2026 Alejandro Ferreira
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 package com.softtek.mcp;
 
 import com.softtek.mcp.model.ProjectLoadException;
@@ -20,6 +44,11 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * The {@code LombokDelomboker} class.
+ *
+ * @author Alejandro Ferreira
+ */
 public class LombokDelomboker {
 
     private static final Logger LOG = LoggerFactory.getLogger(LombokDelomboker.class);
@@ -38,14 +67,23 @@ public class LombokDelomboker {
 
     private final LombokDetector detector = new LombokDetector();
 
+/**
+ * Checks whether a Lombok JAR is available in the cache or on the system classpath.
+ */
     public boolean isLombokAvailable() {
         return findCachedOrSystemLombok() != null;
     }
 
+/**
+ * Runs delombok on a project directory, defaulting to RAW build type.
+ */
     public Path delombok(Path projectDir) throws ProjectLoadException {
         return delombok(projectDir, BuildDetector.BuildType.RAW);
     }
 
+/**
+ * Runs delombok on a project, resolving the Lombok JAR and classpath as needed.
+ */
     public Path delombok(Path projectDir, BuildDetector.BuildType buildType) throws ProjectLoadException {
         if (projectDir == null || !Files.isDirectory(projectDir)) {
             throw new ProjectLoadException("LOMBOK_INPUT_INVALID",
@@ -161,6 +199,9 @@ public class LombokDelomboker {
         return String.join(java.io.File.pathSeparator, entries);
     }
 
+/**
+ * Builds a classpath string for a Maven project, using a cached result if available.
+ */
     private String buildMavenClasspath(Path projectDir) {
         Path cpFile = CLASSPATH_CACHE_DIR.resolve(
                 projectDir.getFileName().toString() + ".mvn.cp.txt");
@@ -192,6 +233,9 @@ public class LombokDelomboker {
         return "";
     }
 
+/**
+ * Runs the Maven {@code dependency:build-classpath} goal and reads the output file.
+ */
     private String runMavenBuildClasspath(Path projectDir, boolean offline) {
         Path tmp = CLASSPATH_CACHE_DIR.resolve(
                 "mvn-cp-" + System.currentTimeMillis() + ".txt");
@@ -207,6 +251,9 @@ public class LombokDelomboker {
         return runAndReadFile(cmd, projectDir, tmp);
     }
 
+/**
+ * Builds a classpath string for a Gradle project via an init-script task.
+ */
     private String buildGradleClasspath(Path projectDir) {
         Path cpFile = CLASSPATH_CACHE_DIR.resolve(
                 projectDir.getFileName().toString() + ".gradle.cp.txt");
@@ -275,6 +322,9 @@ public class LombokDelomboker {
         return "";
     }
 
+/**
+ * Resolves the Gradle command (wrapper or system) for a project directory.
+ */
     private String resolveGradleCommand(Path projectDir) {
         Path wrapper = projectDir.resolve("gradlew");
         if (Files.isRegularFile(wrapper) && Files.isExecutable(wrapper)) {
@@ -297,6 +347,9 @@ public class LombokDelomboker {
         return null;
     }
 
+/**
+ * Runs a command, waits for completion, and reads the output file.
+ */
     private String runAndReadFile(List<String> cmd, Path workDir, Path outputFile) {
         try {
             Process p = new ProcessBuilder(cmd).directory(workDir.toFile())
@@ -331,6 +384,9 @@ public class LombokDelomboker {
         }
     }
 
+/**
+ * Runs a command and reads its stdout.
+ */
     private String runAndReadStdout(List<String> cmd, Path workDir) {
         try {
             Process p = new ProcessBuilder(cmd).directory(workDir.toFile())
@@ -356,6 +412,9 @@ public class LombokDelomboker {
         }
     }
 
+/**
+ * Resolves a Lombok JAR for the given version, downloading it from Maven Central if needed.
+ */
     public Path resolveLombokJar(String version) {
         String v = LombokDetector.normalizeVersion(version);
         if (v == null) v = DEFAULT_LOMBOK_VERSION;
@@ -402,6 +461,9 @@ public class LombokDelomboker {
         }
     }
 
+/**
+ * Finds a Lombok JAR in the cache or on the system classpath.
+ */
     private Path findCachedOrSystemLombok() {
         if (Files.isDirectory(LOMBOK_CACHE_DIR)) {
             try (var stream = Files.list(LOMBOK_CACHE_DIR)) {
@@ -417,6 +479,9 @@ public class LombokDelomboker {
         return findSystemLombokJar();
     }
 
+/**
+ * Searches the Java classpath for a Lombok JAR.
+ */
     private Path findSystemLombokJar() {
         String classpath = System.getProperty("java.class.path", "");
         for (String entry : classpath.split(java.io.File.pathSeparator)) {
@@ -430,6 +495,9 @@ public class LombokDelomboker {
         return null;
     }
 
+/**
+ * Finds the source root directory within a project.
+ */
     private Path findSourceRoot(Path projectDir) {
         String[] candidates = {
                 "src/main/java",
@@ -449,6 +517,9 @@ public class LombokDelomboker {
         return null;
     }
 
+/**
+ * Checks whether a directory tree contains any {@code .java} files.
+ */
     private boolean hasJavaFiles(Path dir) {
         try (var stream = Files.walk(dir, 5)) {
             return stream.anyMatch(p -> p.toString().endsWith(".java"));
@@ -457,6 +528,9 @@ public class LombokDelomboker {
         }
     }
 
+/**
+ * Launches the delombok process with the given JAR, source root, and classpath.
+ */
     private void runDelombok(Path lombokJar, Path srcRoot, Path destDir, String classpath) throws ProjectLoadException {
         List<String> cmd = new ArrayList<>();
         cmd.add("java");
@@ -553,6 +627,9 @@ public class LombokDelomboker {
         return out;
     }
 
+/**
+ * Compares two version arrays element by element.
+ */
     private static int compareVersions(int[] a, int[] b) {
         int n = Math.max(a.length, b.length);
         for (int i = 0; i < n; i++) {
@@ -597,6 +674,9 @@ public class LombokDelomboker {
         }
     }
 
+/**
+ * Recursively deletes a directory tree.
+ */
     private void deleteRecursively(Path dir) throws IOException {
         if (!Files.exists(dir)) return;
         try (var walk = Files.walk(dir)) {

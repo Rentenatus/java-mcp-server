@@ -1,3 +1,27 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2026 Alejandro Ferreira
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 package com.softtek.mcp;
 
 import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
@@ -18,16 +42,27 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.Yaml;
 
+/**
+ * The {@code JavaMcpServer} class.
+ *
+ * @author Alejandro Ferreira
+ */
 public class JavaMcpServer {
 
     private final ProjectManager projectManager = new ProjectManager();
 
+/**
+ * Entry point that loads logging configuration and starts the MCP server.
+ */
     public static void main(String[] args) {
         loadLoggingConfig();
         JavaMcpServer server = new JavaMcpServer();
         server.start();
     }
 
+/**
+ * Loads the YAML logging configuration from the classpath and sets system properties.
+ */
     private static void loadLoggingConfig() {
         try (InputStream in = JavaMcpServer.class.getResourceAsStream("/application.yaml")) {
             if (in != null) {
@@ -40,6 +75,9 @@ public class JavaMcpServer {
         }
     }
 
+/**
+ * Flattens a nested map into dot-separated system property keys.
+ */
     @SuppressWarnings("unchecked")
     private static void flatten(String prefix, Map<String, Object> map) {
         map.forEach((key, value) -> {
@@ -52,6 +90,9 @@ public class JavaMcpServer {
         });
     }
 
+/**
+ * Builds and starts the MCP server with all registered tools over stdio transport.
+ */
     private void start() {
         String serverVersion = VersionLoader.getVersion();
         Logger log = LoggerFactory.getLogger(JavaMcpServer.class);

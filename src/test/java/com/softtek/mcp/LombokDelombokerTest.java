@@ -1,3 +1,27 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2026 Alejandro Ferreira
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 package com.softtek.mcp;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -13,10 +37,18 @@ import com.softtek.mcp.model.ProjectLoadException;
 
 import org.junit.jupiter.api.Test;
 
+/**
+ * The {@code LombokDelombokerTest} class.
+ *
+ * @author Alejandro Ferreira
+ */
 class LombokDelombokerTest {
 
     private final LombokDelomboker delomboker = new LombokDelomboker();
 
+/**
+ * Verifies that a Lombok JAR is resolved from cache or downloaded.
+ */
     @Test
     void resolvesLombokJarFromCacheOrDownloads() {
         Path jar = delomboker.resolveLombokJar("1.18.46");
@@ -28,6 +60,9 @@ class LombokDelombokerTest {
         assertTrue(jar.getFileName().toString().endsWith(".jar"));
     }
 
+/**
+ * Verifies that delombok produces expanded Java source files.
+ */
     @Test
     void delombokProducesExpandedSources() throws Exception {
         Path project = Paths.get("src/test/resources/lombok-sample").toAbsolutePath();
@@ -48,6 +83,9 @@ class LombokDelombokerTest {
         }
     }
 
+/**
+ * Verifies that delombok expands JBossLog annotations with a Maven classpath.
+ */
     @Test
     void delombokExpandsJBossLogWithClasspath() throws Exception {
         Path project = Paths.get("src/test/resources/lombok-bosslog-sample").toAbsolutePath();
@@ -78,6 +116,9 @@ class LombokDelombokerTest {
         }
     }
 
+/**
+ * Verifies that the Maven classpath includes lombok and jboss-logging entries.
+ */
     @Test
     void buildMavenClasspathReturnsEntriesForMavenProject() throws Exception {
         Path project = Paths.get("src/test/resources/lombok-bosslog-sample").toAbsolutePath();
@@ -94,6 +135,9 @@ class LombokDelombokerTest {
                 "Classpath should resolve jboss-logging dependency, got: " + cp);
     }
 
+/**
+ * Verifies that a Gradle classpath on a Maven project contains only the lombok JAR.
+ */
     @Test
     void buildGradleClasspathReturnsEmptyForMavenProject() throws Exception {
         Path project = Paths.get("src/test/resources/lombok-bosslog-sample").toAbsolutePath();
@@ -108,6 +152,9 @@ class LombokDelombokerTest {
                 "For Gradle build type applied to a Maven project, only lombok jar should be in classpath");
     }
 
+/**
+ * Verifies that the RAW build type produces a minimal classpath.
+ */
     @Test
     void rawBuildTypeYieldsMinimalClasspath() throws Exception {
         Path project = Paths.get("src/test/resources/lombok-bosslog-sample").toAbsolutePath();
@@ -121,6 +168,9 @@ class LombokDelombokerTest {
                 "RAW build should not add anything beyond the lombok jar");
     }
 
+/**
+ * Verifies that delombok with RAW build type falls back to running without a classpath.
+ */
     @Test
     void rawDelombokFallsBackToNoClasspath() throws Exception {
         Path project = Paths.get("src/test/resources/lombok-bosslog-sample").toAbsolutePath();
@@ -137,6 +187,9 @@ class LombokDelombokerTest {
         }
     }
 
+/**
+ * Checks whether Maven is available on the system PATH.
+ */
     private static boolean isMavenAvailable() {
         try {
             Process p = new ProcessBuilder("mvn", "-v").redirectErrorStream(true).start();
