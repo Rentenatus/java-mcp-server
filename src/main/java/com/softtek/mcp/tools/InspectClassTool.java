@@ -63,7 +63,8 @@ public class InspectClassTool extends BaseJavaTool {
  */
     @Override protected Map<String, Object> toolProperties() {
         return propsWithDescription("name", "string", "Project name or alias",
-                "className", "string", "Fully qualified class name");
+                "className", "string", "Fully qualified class name",
+                "withJavadoc", "boolean", "If true (default), includes the Javadoc comment in the output");
     }
 /**
  * Returns the list of required argument keys for this tool.
@@ -77,6 +78,8 @@ public class InspectClassTool extends BaseJavaTool {
     protected CallToolResult handle(McpSyncServerExchange exchange, CallToolRequest request) {
         String name = arg(request, "name");
         String className = arg(request, "className");
+        Boolean wj = (Boolean) request.arguments().get("withJavadoc");
+        boolean withJavadoc = (wj == null) || wj;
         var entry = findEntry(name);
 
         var type = entry.model().getAllTypes().stream()
@@ -95,6 +98,15 @@ public class InspectClassTool extends BaseJavaTool {
             sb.append("> ⚠️ **Lombok detected but not delomboked.** Members that Lombok would generate are listed in the `## Lombok-predicted members` section below. Re-load the project with `delombok: true` to see them as real AST members.\n\n");
         }
 
+        if (withJavadoc) {
+            String doc = type.getDocComment();
+            if (doc != null && !doc.isBlank()) {
+                sb.append("## Javadoc\n\n");
+                sb.append("```\n");
+                sb.append(doc.stripIndent().strip());
+                sb.append("\n```\n\n");
+            }
+        }
         String kind;
         if (type.isClass()) kind = "**CLASS**";
         else if (type.isInterface()) kind = "**INTERFACE**";
