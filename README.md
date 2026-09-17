@@ -1,8 +1,8 @@
 # java-mcp-server
 
-**Version 1.0.6** — MIT License, Copyright (c) 2026 Janusch Rentenatus
+**Version 1.0.6** — MIT License
 
-A deterministic Java code analysis server that implements the [Model Context Protocol (MCP)](https://modelcontextprotocol.io) to give AI agents precise, structured access to Java source code.
+A deterministic Java code analysis server that implements the Model Context Protocol (MCP) to give AI agents precise, structured access to Java source code.
 
 ## Why
 
@@ -12,9 +12,7 @@ When AI agents attempt to analyse or refactor Java codebases using purely textua
 - **Inconsistency**: Raw text lacks the resolved symbol table, type information, and cross-references that a compiler or static analyser provides.
 - **Inefficiency**: Sending entire source files as context is wasteful; structured queries (`find all implementations of this interface`, `show me the method body of X`) are far more efficient.
 
-**java-mcp-server** solves this by exposing a rich set of deterministic tools over MCP. It uses [Spoon](https://spoon.gforge.inria.fr/) to parse Java source into a full AST, resolves types, references, annotations, and structure — then makes everything available to an AI agent as individual, verifiable tools. The agent never guesses; it queries.
-
-This project is directly inspired by [cobol-mcp-server](https://github.com/aferreiraguido/cobol-mcp-server), which applies the same idea to COBOL. The goal is the same: **bring determinism to AI-driven code analysis** by grounding every statement in what the parser actually found.
+**java-mcp-server** solves this by exposing a rich set of deterministic tools over MCP. It uses Spoon to parse Java source into a full AST, resolves types, references, annotations, and structure — then makes everything available to an AI agent as individual, verifiable tools. The agent never guesses; it queries.
 
 > ⚠️ This project is under active development. Features and APIs may change.
 
@@ -69,7 +67,7 @@ This project is directly inspired by [cobol-mcp-server](https://github.com/aferr
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see LICENSE.
 
 ## Building
 
@@ -102,7 +100,7 @@ Add to `~/.vibe/config.toml`:
 name = "my-mcp-server"
 transport = "stdio"
 command = "java"
-args = ["-jar", "D:/git_java-mcp-server/target/java-mcp-server-standalone.jar"]
+args = ["-jar", "/path/to/java-mcp-server-standalone.jar"]
 ```
 
 Or add non-interactively from the shell:
@@ -111,13 +109,7 @@ Or add non-interactively from the shell:
 vibe mcp add my-mcp-server \
   --transport stdio \
   --command java \
-  --args '["-jar", "D:/git_java-mcp-server/target/java-mcp-server-standalone.jar"]'
-```
-
-Or from inside Vibe:
-
-```
-/mcp add my-mcp-server
+  --args '["-jar", "/path/to/java-mcp-server-standalone.jar"]'
 ```
 
 ### Claude Desktop / Claude Code
