@@ -103,6 +103,10 @@ public class AddAnnotationTool extends BaseJavaTool {
         int insertLine; // 0-indexed line before which to insert the annotation
 
         if ("class".equals(targetType)) {
+            // Duplicate check
+            boolean alreadyHas = type.getAnnotations().stream()
+                    .anyMatch(a -> annotationMatches(a.getAnnotationType().getQualifiedName(), annotation));
+            if (alreadyHas) return error("Class '" + className + "' already has annotation @" + annotation + ".");
             int declLine = type.getPosition().getLine();
             if (declLine < 1) return error("Cannot determine class declaration line.");
             insertLine = declLine - 1;
