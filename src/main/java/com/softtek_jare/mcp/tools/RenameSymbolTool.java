@@ -107,15 +107,11 @@ public class RenameSymbolTool extends BaseJavaTool {
             return error("scope must be 'method', 'field', or 'class'");
         }
 
-        // Write affected files via EditManager
+        // Write affected files via EditManager — text-based replacement preserves formatting
         for (Path file : affectedFiles) {
-            CtType<?> type = entry.model().getAllTypes().stream()
-                    .filter(t -> t.getPosition().getFile() != null
-                            && t.getPosition().getFile().toPath().normalize().equals(file.normalize()))
-                    .findFirst()
-                    .orElse(null);
-            if (type != null) {
-                String newContent = type.toString();
+            String source = Files.readString(file);
+            String newContent = source.replace(oldName, newName);
+            if (!newContent.equals(source)) {
                 entry = editManager.writeFile(entry, file, newContent, null);
                 manager.updateEntry(entry);
             }

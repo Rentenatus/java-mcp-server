@@ -33,13 +33,13 @@ import com.softtek_jare.mcp.edit.AutoImportResolver;
 import com.softtek_jare.mcp.edit.EditManager;
 import com.softtek_jare.mcp.model.ProjectEntry;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import spoon.reflect.code.CtBlock;
 import spoon.reflect.declaration.CtMethod;
 import spoon.reflect.declaration.CtType;
 
@@ -131,19 +131,19 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
                     + "Provide the fully qualified name or add the dependency.");
         }
 
-        // Replace body in AST
-        CtBlock<?> block = target.getFactory().Core().createBlock();
-        block.addStatement(target.getFactory().Code().createCodeSnippetStatement(newBody));
-        target.setBody(block);
+        // Record body position before modifying AST
+        int bodyStartLine = target.getBody() != null ? target.getBody().getPosition().getLine() : -1;
+        int bodyEndLine = target.getBody() != null ? target.getBody().getPosition().getEndLine() : -1;
 
-        // Write file
+        // Write file — text-based body replacement preserves formatting and comments
         Path file = targetType.getPosition().getFile() != null
                 ? targetType.getPosition().getFile().toPath() : null;
         if (file == null) {
             return error("Cannot determine source file for class " + targetType.getSimpleName());
         }
 
-        String newContent = targetType.toString();
+        String source = Files.readString(file);
+        String newContent = replaceBodyInSource(source, bodyStartLine, bodyEndLine, newBody);
         entry = editManager.writeFile(entry, file, newContent, null);
         manager.updateEntry(entry);
 
@@ -189,5 +189,49 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
             sb.append(")");
         }
         return sb.toString();
+    }
+
+    private static String replaceBodyInSource(String source, int bodyStartLine, int bodyEndLine, String newBody) {
+        if (bodyStartLine < 1 || bodyEndLine < bodyStartLine) return source;
+        String[] lines = source.split("\n", -1);
+        int startIdx = bodyStartLine - 1; // 0-indexed
+        int endIdx = Math.min(bodyEndLine, lines.length); // exclusive
+
+        // Find the opening brace line and closing brace line
+        int openBraceIdx = -1;
+        for (int i = startIdx - 1; i >= 0 && i < lines.length; i--) {
+            if (lines[i].contains("{")) { openBraceIdx = i; break; }
+        }
+        if (openBraceIdx < 0) openBraceIdx = startIdx; // fallback
+
+        int closeBraceIdx = -1;
+        for (int i = endIdx; i < lines.length; i++) {
+            if (lines[i].trim().equals("}") || lines[i].trim().startsWith("}")) { closeBraceIdx = i; break; }
+        }
+        if (closeBraceIdx < 0) closeBraceIdx = endIdx - 1; // fallback
+
+        // Detect indentation from the opening brace line
+        String indent = "";
+        for (char c : lines[openBraceIdx].toCharArray()) {
+            if (c == ' ') indent += " ";
+            else break;
+        }
+
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < lines.length; i++) {
+            if (i == openBraceIdx) {
+                result.append(lines[i]); // keep the opening brace line
+            } else if (i > openBraceIdx && i <= closeBraceIdx) {
+                if (i == closeBraceIdx) {
+                    result.append(indent).append(newBody.stripIndent()).append("\n");
+                    result.append(lines[i]); // keep the closing brace line
+                }
+                // skip old body lines
+            } else {
+                result.append(lines[i]);
+            }
+            if (i < lines.length - 1) result.append("\n");
+        }
+        return result.toString();
     }
 }
