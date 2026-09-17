@@ -1,3 +1,27 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2026 Alejandro Ferreira
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 package com.softtek.mcp.tools;
 
 import io.modelcontextprotocol.server.McpSyncServerExchange;
@@ -13,14 +37,31 @@ import spoon.reflect.code.CtComment;
 import spoon.reflect.declaration.CtElement;
 import spoon.reflect.visitor.filter.TypeFilter;
 
+/**
+ * The {@code SearchSourceTool} class.
+ *
+ * @author Alejandro Ferreira
+ */
 public class SearchSourceTool extends BaseJavaTool {
 
+/**
+ * Constructs the {@code SearchSourceTool} with the given project manager.
+ */
     public SearchSourceTool(ProjectManager manager) {
         super(manager);
     }
 
+/**
+ * Returns the name of this tool.
+ */
     @Override protected String toolName() { return "search_source"; }
+/**
+ * Returns the description of this tool.
+ */
     @Override protected String toolDescription() { return "Searches for text within the source code of a loaded Java project across all elements."; }
+/**
+ * Returns the input schema properties for this tool.
+ */
     @Override protected Map<String, Object> toolProperties() {
         return Map.of(
             "name", Map.of("type", "string", "description", "Project name or alias"),
@@ -28,8 +69,14 @@ public class SearchSourceTool extends BaseJavaTool {
             "caseSensitive", Map.of("type", "boolean", "description", "Optional: case-sensitive search (default false)")
         );
     }
+/**
+ * Returns the list of required argument keys for this tool.
+ */
     @Override protected List<String> toolRequired() { return req("name", "query"); }
 
+/**
+ * Handles the {@code search_source} tool invocation and returns the result.
+ */
     @Override
     protected CallToolResult handle(McpSyncServerExchange exchange, CallToolRequest request) {
         String name = arg(request, "name");
@@ -74,6 +121,9 @@ public class SearchSourceTool extends BaseJavaTool {
         return ok(sb);
     }
 
+/**
+ * Extracts a context snippet around the first match of the query in the text.
+ */
     private String extractSnippet(String text, String query, boolean caseSensitive) {
         String searchText = caseSensitive ? text : text.toLowerCase();
         String searchQuery = caseSensitive ? query : query.toLowerCase();

@@ -1,3 +1,27 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2026 Alejandro Ferreira
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 package com.softtek.mcp;
 
 import com.softtek.mcp.model.ProjectLoadException;
@@ -15,6 +39,11 @@ import org.eclipse.jgit.api.Git;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * The {@code ProjectLoader} class.
+ *
+ * @author Alejandro Ferreira
+ */
 public class ProjectLoader {
 
     private static final Logger LOG = LoggerFactory.getLogger(ProjectLoader.class);
@@ -26,6 +55,9 @@ public class ProjectLoader {
         try { Files.createDirectories(TEMP_BASE); } catch (IOException e) { throw new RuntimeException(e); }
     }
 
+/**
+ * Resolves a source string (Git URL, local path, file:// URI, or archive) to a local project directory.
+ */
     public Path resolveSource(String source) throws ProjectLoadException {
         if (source == null || source.isBlank())
             throw new ProjectLoadException("INVALID_PARAMS", "source is required");
@@ -58,6 +90,9 @@ public class ProjectLoader {
         return localPath;
     }
 
+/**
+ * Recursively deletes a temporary project directory.
+ */
     public void cleanup(Path dir) {
         if (dir == null) return;
         if (!dir.startsWith(TEMP_BASE)) return;
@@ -71,6 +106,9 @@ public class ProjectLoader {
         }
     }
 
+/**
+ * Clones a Git repository into a temporary directory.
+ */
     private Path gitClone(String url) throws ProjectLoadException {
         String repoName = extractRepoName(url);
         Path dest = TEMP_BASE.resolve(repoName + "_" + System.currentTimeMillis());
@@ -88,6 +126,9 @@ public class ProjectLoader {
         }
     }
 
+/**
+ * Downloads an archive from a URL and extracts it.
+ */
     private Path downloadAndExtract(String url) throws ProjectLoadException {
         Path tmpFile = TEMP_BASE.resolve("download_" + System.currentTimeMillis() + "_" + extractFileName(url));
         LOG.info("Downloading {} ...", url);
@@ -104,6 +145,9 @@ public class ProjectLoader {
         }
     }
 
+/**
+ * Extracts an archive (zip, tar.gz, tar) into a temporary directory.
+ */
     private Path extractArchive(Path archive) throws ProjectLoadException {
         String baseName = archive.getFileName().toString();
         int dot = baseName.indexOf('.');
@@ -133,6 +177,9 @@ public class ProjectLoader {
         }
     }
 
+/**
+ * Extracts a ZIP archive, guarding against zip-slip path traversal.
+ */
     private void extractZip(Path zipFile, Path dest) throws IOException {
         try (ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFile.toFile()))) {
             ZipEntry entry;
@@ -153,6 +200,9 @@ public class ProjectLoader {
         }
     }
 
+/**
+ * Extracts a gzipped tar archive.
+ */
     private void extractTarGz(Path tarFile, Path dest) throws IOException {
         try (InputStream fi = Files.newInputStream(tarFile);
              InputStream gzi = new java.util.zip.GZIPInputStream(fi);
@@ -162,6 +212,9 @@ public class ProjectLoader {
         }
     }
 
+/**
+ * Extracts an uncompressed tar archive.
+ */
     private void extractTar(Path tarFile, Path dest) throws IOException {
         try (InputStream fi = Files.newInputStream(tarFile);
              org.apache.commons.compress.archivers.tar.TarArchiveInputStream tai =
@@ -170,6 +223,9 @@ public class ProjectLoader {
         }
     }
 
+/**
+ * Extracts entries from a tar input stream, guarding against tar-slip.
+ */
     private void extractTarStream(org.apache.commons.compress.archivers.tar.TarArchiveInputStream tai, Path dest) throws IOException {
         org.apache.commons.compress.archivers.ArchiveEntry entry;
         byte[] buf = new byte[8192];
@@ -187,6 +243,9 @@ public class ProjectLoader {
         }
     }
 
+/**
+ * If the extracted archive contains a single root directory, returns it.
+ */
     private Path findSingleRoot(Path dest) throws IOException {
         try (var list = Files.list(dest)) {
             var dirs = list.filter(Files::isDirectory).toList();
@@ -197,26 +256,41 @@ public class ProjectLoader {
         return dest;
     }
 
+/**
+ * Checks whether a directory contains any {@code .java} files within three levels.
+ */
     private boolean hasJavaFiles(Path dir) throws IOException {
         return Files.walk(dir, 3).anyMatch(p -> p.toString().endsWith(".java"));
     }
 
+/**
+ * Checks whether a URL points to an archive (zip, tar.gz, tgz, or tar).
+ */
     private boolean isArchiveUrl(String url) {
         String lower = url.toLowerCase();
         return lower.endsWith(".zip") || lower.endsWith(".tar.gz") || lower.endsWith(".tgz") || lower.endsWith(".tar");
     }
 
+/**
+ * Checks whether a path has an archive file extension.
+ */
     private boolean isArchiveFile(Path path) {
         String lower = path.toString().toLowerCase();
         return lower.endsWith(".zip") || lower.endsWith(".tar.gz") || lower.endsWith(".tgz") || lower.endsWith(".tar");
     }
 
+/**
+ * Extracts the repository name from a Git URL.
+ */
     private String extractRepoName(String url) {
         if (url.endsWith(".git")) url = url.substring(0, url.length() - 4);
         int lastSlash = url.lastIndexOf('/');
         return lastSlash >= 0 ? url.substring(lastSlash + 1) : url;
     }
 
+/**
+ * Extracts the file name from a URL.
+ */
     private String extractFileName(String url) {
         int lastSlash = url.lastIndexOf('/');
         return lastSlash >= 0 ? url.substring(lastSlash + 1) : url;

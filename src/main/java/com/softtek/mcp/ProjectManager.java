@@ -1,3 +1,27 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2026 Alejandro Ferreira
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 package com.softtek.mcp;
 
 import com.softtek.mcp.model.ProjectEntry;
@@ -17,6 +41,11 @@ import spoon.Launcher;
 import spoon.MavenLauncher;
 import spoon.reflect.CtModel;
 
+/**
+ * The {@code ProjectManager} class.
+ *
+ * @author Alejandro Ferreira
+ */
 public class ProjectManager {
 
     private static final Logger LOG = LoggerFactory.getLogger(ProjectManager.class);
@@ -27,10 +56,16 @@ public class ProjectManager {
     private final LombokDetector lombokDetector = new LombokDetector();
     private final LombokDelomboker lombokDelomboker = new LombokDelomboker();
 
+/**
+ * Loads a Java project with automatic delombok enabled.
+ */
     public ProjectEntry load(String source, String alias, Instant expiryDate) throws ProjectLoadException {
         return load(source, alias, expiryDate, true);
     }
 
+/**
+ * Loads a Java project, optionally running delombok if Lombok is detected.
+ */
     public ProjectEntry load(String source, String alias, Instant expiryDate, boolean autoDelombok)
             throws ProjectLoadException {
         removeExpired();
@@ -98,6 +133,9 @@ public class ProjectManager {
         }
     }
 
+/**
+ * Finds a loaded project by name or alias.
+ */
     public ProjectEntry find(String nameOrAlias) {
         removeExpired();
         for (ProjectEntry entry : entries.values()) {
@@ -108,6 +146,9 @@ public class ProjectManager {
         return entries.get(nameOrAlias);
     }
 
+/**
+ * Removes and cleans up a loaded project.
+ */
     public ProjectEntry remove(String nameOrAlias) {
         ProjectEntry entry = entries.remove(nameOrAlias);
         if (entry != null) {
@@ -120,11 +161,17 @@ public class ProjectManager {
         return entry;
     }
 
+/**
+ * Returns all currently loaded projects.
+ */
     public Collection<ProjectEntry> list() {
         removeExpired();
         return entries.values();
     }
 
+/**
+ * Removes all projects whose expiry date has passed.
+ */
     private void removeExpired() {
         Instant now = Instant.now();
         entries.values().removeIf(entry -> {
@@ -140,6 +187,9 @@ public class ProjectManager {
         });
     }
 
+/**
+ * Creates a Spoon Launcher for the project, using MavenLauncher for Maven projects.
+ */
     public static Launcher createLauncher(Path projectDir, BuildDetector.BuildInfo buildInfo) {
         Launcher launcher;
         if (buildInfo.type() == BuildDetector.BuildType.MAVEN) {
@@ -169,6 +219,9 @@ public class ProjectManager {
         return launcher;
     }
 
+/**
+ * Finds the source directory for the project based on build type.
+ */
     private static Path findSourceDir(Path projectDir, BuildDetector.BuildInfo buildInfo) {
         if (buildInfo.type() == BuildDetector.BuildType.MAVEN) {
             Path src = projectDir.resolve("src/main/java");
@@ -179,6 +232,9 @@ public class ProjectManager {
         return projectDir;
     }
 
+/**
+ * Adds Gradle source directories to the launcher.
+ */
     private static void addGradleSourceDirs(Launcher launcher, Path projectDir) {
         String[] gradleSrcs = {"src/main/java", "src/main/kotlin", "src/main/groovy"};
         boolean found = false;
@@ -194,6 +250,9 @@ public class ProjectManager {
         }
     }
 
+/**
+ * Derives a project name from the project directory name.
+ */
     public static String deriveName(Path projectDir, String source) {
         String name = projectDir.getFileName().toString();
         return name;

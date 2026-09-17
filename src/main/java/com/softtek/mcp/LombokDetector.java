@@ -1,3 +1,27 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2026 Alejandro Ferreira
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 package com.softtek.mcp;
 
 import java.io.IOException;
@@ -8,6 +32,11 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * The {@code LombokDetector} class.
+ *
+ * @author Alejandro Ferreira
+ */
 public class LombokDetector {
 
     public record LombokInfo(boolean present, String version, String source) {}
@@ -28,6 +57,9 @@ public class LombokDetector {
             "org\\.projectlombok\\s*:\\s*lombok\\s*:\\s*\\$",
             Pattern.CASE_INSENSITIVE);
 
+/**
+ * Detects Lombok usage and version by scanning {@code pom.xml} or {@code build.gradle}.
+ */
     public LombokInfo detect(Path projectDir) {
         if (projectDir == null || !Files.isDirectory(projectDir)) {
             return new LombokInfo(false, null, null);
@@ -69,6 +101,9 @@ public class LombokDetector {
         return new LombokInfo(false, null, null);
     }
 
+/**
+ * Scans Java source files for Lombok annotations.
+ */
     public boolean hasLombokInSources(Path projectDir) {
         if (projectDir == null || !Files.isDirectory(projectDir)) return false;
         Path src = projectDir.resolve("src/main/java");
@@ -99,6 +134,9 @@ public class LombokDetector {
     private static final Pattern LOMBOK_ANNOT_PATTERN = Pattern.compile(
             "@(Data|Getter|Setter|Builder|Value|ToString|EqualsAndHashCode|NoArgsConstructor|RequiredArgsConstructor|AllArgsConstructor|With|SneakyThrows|Log|Synchronized|Locked|NonNull|Cleanup|UtilityClass|FieldDefaults|Wither|Accessors)\\b");
 
+/**
+ * Reads a file as UTF-8 text, returning {@code null} on failure.
+ */
     private String readSafely(Path p) {
         try {
             return Files.readString(p, StandardCharsets.UTF_8);
@@ -107,6 +145,9 @@ public class LombokDetector {
         }
     }
 
+/**
+ * Normalizes a version string by trimming whitespace and stripping a leading {@code v} prefix.
+ */
     public static String normalizeVersion(String version) {
         if (version == null) return null;
         String v = version.trim();

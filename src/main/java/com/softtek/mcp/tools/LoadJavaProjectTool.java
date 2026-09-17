@@ -1,3 +1,27 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2026 Alejandro Ferreira
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 package com.softtek.mcp.tools;
 
 import io.modelcontextprotocol.server.McpServerFeatures;
@@ -17,20 +41,34 @@ import org.slf4j.LoggerFactory;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
+/**
+ * The {@code LoadJavaProjectTool} class.
+ *
+ * @author Alejandro Ferreira
+ */
 public class LoadJavaProjectTool implements McpTool {
 
     private final ProjectManager manager;
     private static final Logger LOG = LoggerFactory.getLogger(LoadJavaProjectTool.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+/**
+ * Constructs the tool with the given project manager.
+ */
     public LoadJavaProjectTool(ProjectManager manager) {
         this.manager = manager;
     }
 
+/**
+ * Extracts a string argument from the request.
+ */
     private String arg(McpSchema.CallToolRequest request, String key) {
         return (String) request.arguments().get(key);
     }
 
+/**
+ * Extracts a boolean argument from the request.
+ */
     private Boolean boolArg(McpSchema.CallToolRequest request, String key) {
         Object v = request.arguments().get(key);
         if (v instanceof Boolean b) return b;
@@ -38,6 +76,9 @@ public class LoadJavaProjectTool implements McpTool {
         return null;
     }
 
+/**
+ * Builds the {@code load_java_project} tool specification.
+ */
     @Override
     public McpServerFeatures.SyncToolSpecification build() {
         McpSchema.Tool toolDef = McpSchema.Tool.builder("load_java_project")
@@ -109,6 +150,9 @@ public class LoadJavaProjectTool implements McpTool {
         });
     }
 
+/**
+ * Builds a JSON error result with the given type and message.
+ */
     private McpSchema.CallToolResult buildError(String type, String message) {
         try {
             ObjectNode json = MAPPER.createObjectNode();
