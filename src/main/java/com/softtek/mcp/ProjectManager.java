@@ -141,7 +141,6 @@ public class ProjectManager {
  * Finds a loaded project by name or alias.
  */
     public ProjectEntry find(String nameOrAlias) {
-        markExpired();
         for (ProjectEntry entry : entries.values()) {
             if (entry.alias() != null && entry.alias().equals(nameOrAlias)) {
                 return entry;
@@ -169,7 +168,6 @@ public class ProjectManager {
  * Returns all currently loaded projects.
  */
     public Collection<ProjectEntry> list() {
-        markExpired();
         return entries.values();
     }
 
@@ -177,7 +175,7 @@ public class ProjectManager {
  * Marks all projects whose expiry date has passed as expired (without deleting them).
  * Returns the names of newly expired projects for agent notification.
  */
-    private List<String> markExpired() {
+    public List<String> markExpired() {
         Instant now = Instant.now();
         List<String> newlyExpired = new ArrayList<>();
         for (var entry : entries.values()) {

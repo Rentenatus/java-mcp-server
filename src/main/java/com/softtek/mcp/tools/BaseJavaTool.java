@@ -35,6 +35,7 @@ import com.softtek.mcp.model.ProjectEntry;
 
 import java.util.Map;
 import java.util.List;
+import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,6 +49,7 @@ public abstract class BaseJavaTool implements McpTool {
 
     protected final ProjectManager manager;
     protected final Logger log = LoggerFactory.getLogger(getClass());
+    private List<String> expiredNames = List.of();
 
 /**
  * Constructs the tool with the given project manager.
@@ -90,6 +92,7 @@ public abstract class BaseJavaTool implements McpTool {
         return new McpServerFeatures.SyncToolSpecification(toolDef, (exchange, request) -> {
             try {
                 log.info("Tool invoked: {}({})", toolName(), request.arguments());
+                expiredNames = manager.markExpired();
                 return handle(exchange, request);
             } catch (IllegalArgumentException e) {
                 log.warn("Tool {} error: {}", toolName(), e.getMessage());
@@ -134,6 +137,23 @@ public abstract class BaseJavaTool implements McpTool {
     }
 
 /**
+ * Formats an expiry warning for newly expired projects.
+ */
+    protected static String formatExpiredWarning(List<String> expiredNames) {
+        if (expiredNames == null || expiredNames.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        sb.append("> ⚠️ **Expired projects:** ");
+        for (int i = 0; i < expiredNames.size(); i++) {
+            if (i > 0) sb.append(", ");
+            sb.append("`").append(expiredNames.get(i)).append("`");
+        }
+        sb.append("\n");
+        sb.append("> These projects have passed their expiry date. Data may be stale.\n");
+        sb.append("> Call `reload_java_project` with `expired=true` to reload all expired projects.\n\n");
+        return sb.toString();
+    }
+
+/**
  * Builds an error result with the given message.
  */
     protected static CallToolResult error(String message) {
@@ -146,9 +166,10 @@ public abstract class BaseJavaTool implements McpTool {
 /**
  * Builds a successful result with the given text content.
  */
-    protected static CallToolResult ok(String content) {
+    protected CallToolResult ok(String content) {
+        String warning = formatExpiredWarning(expiredNames);
         return McpSchema.CallToolResult.builder()
-                .addTextContent(content)
+                .addTextContent(warning + content)
                 .isError(false)
                 .build();
     }
@@ -156,7 +177,7 @@ public abstract class BaseJavaTool implements McpTool {
 /**
  * Builds a successful result from a StringBuilder.
  */
-    protected static CallToolResult ok(StringBuilder sb) {
+    protected CallToolResult ok(StringBuilder sb) {
         return ok(sb.toString());
     }
 
