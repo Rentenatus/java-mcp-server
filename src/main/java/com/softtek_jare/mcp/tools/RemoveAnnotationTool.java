@@ -105,6 +105,7 @@ public class RemoveAnnotationTool extends BaseJavaTool {
         String newSource = matcher.replaceFirst("");
         entry = editManager.writeFile(entry, file, newSource, null);
         manager.updateEntry(entry);
+        editManager.logEdit(toolName());
 
         return ok("Annotation removed: @" + annotation + " from " + targetType
                 + (targetName != null ? " " + targetName : "") + "\n" + formatMultiModuleWarning(entry));

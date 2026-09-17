@@ -132,6 +132,7 @@ public class AddFieldTool extends BaseJavaTool {
 
         entry = editManager.writeFile(entry, file, newContent, null);
         manager.updateEntry(entry);
+        editManager.logEdit(toolName());
 
         StringBuilder sb = new StringBuilder();
         sb.append("Field added: ").append(className).append(".").append(fieldName).append("\n");

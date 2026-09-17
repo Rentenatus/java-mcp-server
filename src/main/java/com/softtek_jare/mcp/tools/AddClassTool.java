@@ -110,6 +110,7 @@ public class AddClassTool extends BaseJavaTool {
 
         entry = editManager.writeFile(entry, file, src.toString(), null);
         manager.updateEntry(entry);
+        editManager.logEdit(toolName());
 
         return ok("Class created: " + packageName + "." + className + " at " + file
                 + "\n" + formatMultiModuleWarning(entry));

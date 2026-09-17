@@ -139,6 +139,7 @@ public class RemoveMemberTool extends BaseJavaTool {
 
         entry = editManager.writeFile(entry, file, newSource, null);
         manager.updateEntry(entry);
+        editManager.logEdit(toolName());
 
         StringBuilder sb = new StringBuilder();
         sb.append("Removed: ").append(className).append(".").append(memberName)

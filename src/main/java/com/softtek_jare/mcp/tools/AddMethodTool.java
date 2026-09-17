@@ -150,6 +150,7 @@ public class AddMethodTool extends BaseJavaTool {
 
         entry = editManager.writeFile(entry, file, newContent, null);
         manager.updateEntry(entry);
+        editManager.logEdit(toolName());
 
         StringBuilder sb = new StringBuilder();
         sb.append("Method added: ").append(className).append(".").append(methodName).append("\n");

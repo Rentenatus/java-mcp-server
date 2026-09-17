@@ -114,6 +114,7 @@ public class RenameSymbolTool extends BaseJavaTool {
             if (!newContent.equals(source)) {
                 entry = editManager.writeFile(entry, file, newContent, null);
                 manager.updateEntry(entry);
+                editManager.logEdit(toolName());
             }
         }
 
@@ -127,6 +128,7 @@ public class RenameSymbolTool extends BaseJavaTool {
                     Files.move(oldFile, newFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                     entry = editManager.writeFile(entry, newFile, Files.readString(newFile), null);
                     manager.updateEntry(entry);
+                editManager.logEdit(toolName());
                 }
             }
         }

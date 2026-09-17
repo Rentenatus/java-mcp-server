@@ -111,6 +111,7 @@ public class EditAnnotationTool extends BaseJavaTool {
         String newSource = matcher.replaceFirst(replacement);
         entry = editManager.writeFile(entry, file, newSource, null);
         manager.updateEntry(entry);
+        editManager.logEdit(toolName());
 
         return ok("Annotation edited: @" + annotation + " -> " + replacement + "\n"
                 + formatMultiModuleWarning(entry));

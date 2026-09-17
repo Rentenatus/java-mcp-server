@@ -156,6 +156,7 @@ public class AddAnnotationTool extends BaseJavaTool {
 
         entry = editManager.writeFile(entry, file, newSource, null);
         manager.updateEntry(entry);
+        editManager.logEdit(toolName());
 
         StringBuilder sb = new StringBuilder();
         sb.append("Annotation added: @").append(annotation).append(" on ").append(targetType);

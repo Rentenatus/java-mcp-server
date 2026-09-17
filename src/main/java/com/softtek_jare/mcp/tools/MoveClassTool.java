@@ -108,6 +108,7 @@ public class MoveClassTool extends BaseJavaTool {
         // Delete old file
         Files.delete(oldFile);
         manager.markDirty(name);
+        editManager.logEdit(toolName());
 
         // Update imports in all loaded source files
         String oldQualified = oldPackage + "." + simpleName;
@@ -124,6 +125,7 @@ public class MoveClassTool extends BaseJavaTool {
                 if (!updatedContent.equals(content)) {
                     entry = editManager.writeFile(entry, file, updatedContent, null);
                     manager.updateEntry(entry);
+        editManager.logEdit(toolName());
                     importsUpdated++;
                 }
             }

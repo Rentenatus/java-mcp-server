@@ -147,6 +147,7 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
         newContent = insertImports(newContent, importResult.importsToAdd());
         entry = editManager.writeFile(entry, file, newContent, null);
         manager.updateEntry(entry);
+        editManager.logEdit(toolName());
 
         StringBuilder sb = new StringBuilder();
         sb.append("Method body replaced: ").append(className).append(".").append(methodName).append("\n");

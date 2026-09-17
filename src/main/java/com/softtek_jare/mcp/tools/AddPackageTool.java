@@ -87,8 +87,10 @@ public class AddPackageTool extends BaseJavaTool {
             String infoContent = "package " + packageName + ";\n\n";
             entry = editManager.writeFile(entry, infoFile, infoContent, null);
             manager.updateEntry(entry);
+        editManager.logEdit(toolName());
         } else {
             manager.markDirty(name);
+        editManager.logEdit(toolName());
         }
 
         return ok("Package created: " + packageName + " at " + packageDir
