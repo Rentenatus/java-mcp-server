@@ -101,14 +101,15 @@ public class MoveClassTool extends BaseJavaTool {
         String newSource = source.replace("package " + oldPackage + ";",
                 "package " + newPackage + ";");
 
-        // Write to new location
+        // Write to new location via EditManager
         Files.createDirectories(newPackageDir);
-        Files.writeString(newFile, newSource);
+        entry = editManager.writeFile(entry, newFile, newSource, null);
+        manager.updateEntry(entry);
+        editManager.logEdit(toolName());
 
         // Delete old file
         Files.delete(oldFile);
         manager.markDirty(name);
-        editManager.logEdit(toolName());
 
         // Update imports in all loaded source files
         String oldQualified = oldPackage + "." + simpleName;
