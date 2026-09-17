@@ -84,6 +84,9 @@ public class ListLoadedProjectsTool extends BaseJavaTool {
             sb.append(" — ").append(types).append(" types, build: ").append(entry.buildType());
             if (entry.expiryDate() != null) {
                 sb.append(" [expires: ").append(entry.expiryDate()).append("]");
+            if (entry.expired()) {
+                sb.append(" **[EXPIRED]**");
+            }
             }
             sb.append("\n");
         }
