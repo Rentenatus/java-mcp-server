@@ -27,6 +27,7 @@ package com.softtek_jare.mcp.model;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Set;
 
 import spoon.Launcher;
 import spoon.reflect.CtModel;
@@ -53,5 +54,10 @@ public record ProjectEntry(
         boolean editable,
         int modulesDetected,
         int modulesLoaded,
-        boolean modelDirty
-) {}
+        boolean modelDirty,
+        Set<Path> editedFiles
+) {
+    public boolean isFileEdited(Path file) {
+        return editedFiles.contains(file.normalize());
+    }
+}

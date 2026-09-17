@@ -142,7 +142,7 @@ public class ProjectManager {
                     sourceToAnalyze, launcher, model, buildInfo.type().name(),
                     delomboked, lombokVersion,
                     projectDir, source, buildFingerprints(projectDir), false, editable,
-                    modulesDetected, modulesLoaded, false);
+                    modulesDetected, modulesLoaded, false, java.util.Set.of());
             entries.put(name, entry);
             LOG.info("Project '{}' loaded successfully ({} types, delomboked={})",
                     name, model.getAllTypes().size(), delomboked);
@@ -176,7 +176,7 @@ public class ProjectManager {
             entry.buildType(), entry.delomboked(), entry.lombokVersion(),
             entry.originalProjectDir(), entry.originalSource(),
             entry.sourceFingerprints(), entry.expired(), entry.editable(),
-            entry.modulesDetected(), entry.modulesLoaded(), true));
+            entry.modulesDetected(), entry.modulesLoaded(), true, entry.editedFiles()));
     }
 
 /**
@@ -191,7 +191,7 @@ public class ProjectManager {
                     entry.buildType(), entry.delomboked(), entry.lombokVersion(),
                     entry.originalProjectDir(), entry.originalSource(),
                     entry.sourceFingerprints(), entry.expired(), entry.editable(),
-                    entry.modulesDetected(), entry.modulesLoaded(), true));
+                    entry.modulesDetected(), entry.modulesLoaded(), true, entry.editedFiles()));
             }
         }
     }
@@ -270,7 +270,7 @@ public class ProjectManager {
                     entry.buildType(), entry.delomboked(), entry.lombokVersion(),
                     entry.originalProjectDir(), entry.originalSource(),
                     entry.sourceFingerprints(), true, entry.editable(),
-                    entry.modulesDetected(), entry.modulesLoaded(), entry.modelDirty()));
+                    entry.modulesDetected(), entry.modulesLoaded(), entry.modelDirty(), entry.editedFiles()));
                 LOG.info("Project '{}' expired at {}", entry.name(), entry.expiryDate());
                 newlyExpired.add(entry.name());
             }

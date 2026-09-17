@@ -171,10 +171,9 @@ public abstract class BaseJavaTool implements McpTool {
  *                                  expected fingerprint does not match
  */
     public static void validateFingerprint(ProjectEntry entry, java.nio.file.Path file, String expectedFingerprint) {
-        // If model is dirty (edits have been made since load), skip disk-vs-fingerprint comparison.
-        // The fingerprints represent load-time state and will not match disk after our own edits.
-        // The caller should reload the project for a clean fingerprint check.
-        if (entry.modelDirty()) return;
+        // Skip disk-vs-fingerprint comparison only for files this session has edited.
+        // For unedited files, the fingerprint must still match disk (external change detection).
+        if (entry.isFileEdited(file)) return;
 
         java.nio.file.Path normalized = file.normalize();
         Fingerprint stored = entry.sourceFingerprints().get(normalized);

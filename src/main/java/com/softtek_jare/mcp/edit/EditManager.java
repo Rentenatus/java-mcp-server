@@ -35,6 +35,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -120,14 +121,16 @@ public class EditManager {
             throw e;
         }
 
-        // 5. Mark model as dirty — fingerprints stay at load-time for dirty detection
+        // 5. Mark model as dirty and track the edited file for per-file fingerprint skipping
+        Set<Path> updatedEdited = new java.util.HashSet<>(entry.editedFiles());
+        updatedEdited.add(file.normalize());
         return new ProjectEntry(
                 entry.name(), entry.alias(), entry.expiryDate(),
                 entry.projectDir(), entry.launcher(), entry.model(),
                 entry.buildType(), entry.delomboked(), entry.lombokVersion(),
                 entry.originalProjectDir(), entry.originalSource(),
                 entry.sourceFingerprints(), entry.expired(), entry.editable(),
-                entry.modulesDetected(), entry.modulesLoaded(), true);
+                entry.modulesDetected(), entry.modulesLoaded(), true, java.util.Collections.unmodifiableSet(updatedEdited));
     }
 
     /**

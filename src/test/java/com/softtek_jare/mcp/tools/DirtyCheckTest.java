@@ -255,7 +255,7 @@ class DirtyCheckTest {
             originalProjectDir, null, null, "RAW",
             false, null,
             originalProjectDir, "test-source",
-            fingerprints, false, true, 1, 1, false
+            fingerprints, false, true, 1, 1, false, java.util.Set.of()
         );
     }
 }
