@@ -62,7 +62,8 @@ public class InspectFieldTool extends BaseJavaTool {
         return Map.of(
             "name", Map.of("type", "string", "description", "Project name or alias"),
             "className", Map.of("type", "string", "description", "Fully qualified class name"),
-            "fieldName", Map.of("type", "string", "description", "Field name")
+            "fieldName", Map.of("type", "string", "description", "Field name"),
+            "withJavadoc", Map.of("type", "boolean", "description", "If true (default), includes the Javadoc comment in the output")
         );
     }
 /**
@@ -78,6 +79,8 @@ public class InspectFieldTool extends BaseJavaTool {
         String name = arg(request, "name");
         String className = arg(request, "className");
         String fieldName = arg(request, "fieldName");
+        Boolean wj = (Boolean) request.arguments().get("withJavadoc");
+        boolean withJavadoc = (wj == null) || wj;
         var entry = findEntry(name);
 
         var type = entry.model().getAllTypes().stream()
@@ -92,6 +95,16 @@ public class InspectFieldTool extends BaseJavaTool {
 
         StringBuilder sb = new StringBuilder();
         sb.append("# Field: `").append(fieldName).append("` in `").append(className).append("`\n\n");
+
+        if (withJavadoc) {
+            String doc = field.getDocComment();
+            if (doc != null && !doc.isBlank()) {
+                sb.append("## Javadoc\n\n");
+                sb.append("```\n");
+                sb.append(doc.stripIndent().strip());
+                sb.append("\n```\n\n");
+            }
+        }
         sb.append("| Property | Value |\n");
         sb.append("|----------|-------|\n");
         sb.append("| **Type** | `").append(field.getType()).append("` |\n");
