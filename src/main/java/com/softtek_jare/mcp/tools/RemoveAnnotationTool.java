@@ -111,42 +111,48 @@ public class RemoveAnnotationTool extends BaseJavaTool {
                     .orElseThrow(() -> new IllegalArgumentException("Field '" + targetName + "' not found in " + className));
             searchStartLine = field.getPosition().getLine();
             searchEndLine = field.getPosition().getEndLine();
+        } else if ("class".equals(targetType)) {
+            // Annotations on class are above the declaration line
+            searchStartLine = 1;
+            searchEndLine = type.getPosition().getLine();
         }
 
         String source = Files.readString(file);
-        // Extract the search region
         String[] lines = source.split("\n", -1);
-        StringBuilder searchArea = new StringBuilder();
+        // Match @Annotation or @Annotation(...) within the target line range
+        Pattern pattern = Pattern.compile(
+            "@\\Q" + annotation + "\\E(\\([^)]*\\))?",
+            Pattern.MULTILINE);
+        boolean found = false;
         for (int i = 0; i < lines.length; i++) {
             int lineNum = i + 1;
             if (lineNum >= searchStartLine && lineNum <= searchEndLine) {
-                searchArea.append(lines[i]);
-                if (i < lines.length - 1) searchArea.append("\n");
+                Matcher m = pattern.matcher(lines[i]);
+                if (m.find()) {
+                    // Remove the annotation, keep the rest of the line
+                    lines[i] = m.replaceFirst("").trim();
+                    if (lines[i].isEmpty()) {
+                        // Remove the empty line by setting it to null marker
+                        lines[i] = null;
+                    }
+                    found = true;
+                    break;
+                }
             }
         }
-        Pattern pattern = Pattern.compile(
-            "@\\Q" + annotation + "\\E(\\([^)]*\\))?\\s*\\n?\\s*",
-            Pattern.MULTILINE);
-        Matcher matcher = pattern.matcher(searchArea.toString());
-        if (!matcher.find()) {
+        if (!found) {
             return error("Annotation '@" + annotation + "' not found on " + targetType
                     + (targetName != null ? " '" + targetName + "'" : "") + ". "
                     + "No silent no-op — annotation must be present to remove.");
         }
-        String replacedArea = matcher.replaceFirst("");
-        String[] replacedLines = replacedArea.split("\n", -1);
+        // Rebuild source, skipping null-marked lines
         StringBuilder newSource = new StringBuilder();
-        int replacedIdx = 0;
-        for (int i = 0; i < lines.length; i++) {
-            int lineNum = i + 1;
-            if (lineNum >= searchStartLine && lineNum <= searchEndLine) {
-                if (replacedIdx < replacedLines.length) {
-                    newSource.append(replacedLines[replacedIdx++]);
-                }
-            } else {
-                newSource.append(lines[i]);
-            }
-            if (i < lines.length - 1) newSource.append("\n");
+        boolean first = true;
+        for (String line : lines) {
+            if (line == null) continue;
+            if (!first) newSource.append("\n");
+            newSource.append(line);
+            first = false;
         }
         entry = editManager.writeFile(entry, file, newSource.toString(), null);
         manager.updateEntry(entry);

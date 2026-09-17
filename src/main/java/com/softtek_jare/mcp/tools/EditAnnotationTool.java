@@ -98,6 +98,7 @@ public class EditAnnotationTool extends BaseJavaTool {
         if (file == null) return error("Cannot determine source file.");
 
         // Determine line range to search based on targetType/targetName
+        // For class: search from line 1 up to the class declaration line (annotations are above it)
         int searchStartLine = 1;
         int searchEndLine = Integer.MAX_VALUE;
         if ("method".equals(targetType) && targetName != null) {
@@ -114,48 +115,39 @@ public class EditAnnotationTool extends BaseJavaTool {
                     .orElseThrow(() -> new IllegalArgumentException("Field '" + targetName + "' not found in " + className));
             searchStartLine = field.getPosition().getLine();
             searchEndLine = field.getPosition().getEndLine();
+        } else if ("class".equals(targetType)) {
+            // Annotations on class are above the declaration line
+            searchStartLine = 1;
+            searchEndLine = type.getPosition().getLine();
         }
 
         String source = Files.readString(file);
-        // Extract the search region and match within it
+        // Apply regex only within the target line range — find and replace in-place
         String[] lines = source.split("\n", -1);
-        StringBuilder searchArea = new StringBuilder();
-        for (int i = 0; i < lines.length; i++) {
-            int lineNum = i + 1;
-            if (lineNum >= searchStartLine && lineNum <= searchEndLine) {
-                searchArea.append(lines[i]);
-                if (i < lines.length - 1) searchArea.append("\n");
-            }
-        }
         Pattern pattern = Pattern.compile(
             "@\\Q" + annotation + "\\E(\\([^)]*\\))?",
             Pattern.MULTILINE);
-        Matcher matcher = pattern.matcher(searchArea.toString());
-        if (!matcher.find()) {
-            return error("Annotation '@" + annotation + "' not found on " + targetType
-                    + (targetName != null ? " '" + targetName + "'" : "") + ". Use add_annotation to add it first.");
-        }
-
+        boolean found = false;
         String replacement = "@" + annotation;
         if (newAttributes != null && !newAttributes.isBlank()) {
             replacement += "(" + newAttributes + ")";
         }
-
-        String replacedArea = matcher.replaceFirst(replacement);
-        String[] replacedLines = replacedArea.split("\n", -1);
-        StringBuilder newSource = new StringBuilder();
-        int replacedIdx = 0;
         for (int i = 0; i < lines.length; i++) {
             int lineNum = i + 1;
             if (lineNum >= searchStartLine && lineNum <= searchEndLine) {
-                if (replacedIdx < replacedLines.length) {
-                    newSource.append(replacedLines[replacedIdx++]);
+                Matcher m = pattern.matcher(lines[i]);
+                if (m.find()) {
+                    lines[i] = m.replaceFirst(replacement);
+                    found = true;
+                    break;
                 }
-            } else {
-                newSource.append(lines[i]);
             }
-            if (i < lines.length - 1) newSource.append("\n");
         }
+        if (!found) {
+            return error("Annotation '@" + annotation + "' not found on " + targetType
+                    + (targetName != null ? " '" + targetName + "'" : "") + ". Use add_annotation to add it first.");
+        }
+        String newSource = String.join("\n", lines);
         entry = editManager.writeFile(entry, file, newSource.toString(), null);
         manager.updateEntry(entry);
         editManager.logEdit(toolName());
