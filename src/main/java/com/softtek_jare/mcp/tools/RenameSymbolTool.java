@@ -119,7 +119,15 @@ public class RenameSymbolTool extends BaseJavaTool {
                 "\\b" + java.util.regex.Pattern.quote(oldName) + "\\b");
         for (Path file : affectedFiles) {
             String source = Files.readString(file);
-            String newContent = replaceInCodeOnly(source, namePattern, newName);
+            String newContent;
+            if (updateCallers) {
+                // Global: replace all code occurrences (but not strings/comments)
+                newContent = replaceInCodeOnly(source, namePattern, newName);
+            } else {
+                // Declaration only: replace only on the declaration line(s)
+                int declLine = getDeclarationLine(scope, targetType, oldName);
+                newContent = replaceOnLineOnly(source, namePattern, newName, declLine);
+            }
             if (!newContent.equals(source)) {
                 entry = editManager.writeFile(entry, file, newContent, null);
                 manager.updateEntry(entry);
@@ -295,6 +303,32 @@ public class RenameSymbolTool extends BaseJavaTool {
     }
 
     private record UnresolvedRef(String file, int line, String context) {}
+
+    private static int getDeclarationLine(String scope, CtType<?> targetType, String oldName) {
+        if ("method".equals(scope)) {
+            return targetType.getMethods().stream()
+                    .filter(m -> m.getSimpleName().equals(oldName))
+                    .mapToInt(m -> m.getPosition().getLine())
+                    .max().orElse(1);
+        } else if ("field".equals(scope)) {
+            return targetType.getFields().stream()
+                    .filter(f -> f.getSimpleName().equals(oldName))
+                    .mapToInt(f -> f.getPosition().getLine())
+                    .max().orElse(1);
+        } else {
+            return targetType.getPosition().getLine();
+        }
+    }
+
+    private static String replaceOnLineOnly(String source, java.util.regex.Pattern namePattern,
+                                            String newName, int declLine) {
+        if (declLine < 1) return source;
+        String[] lines = source.split("\n", -1);
+        int idx = declLine - 1; // 0-indexed
+        if (idx >= lines.length) return source;
+        lines[idx] = namePattern.matcher(lines[idx]).replaceAll(newName);
+        return String.join("\n", lines);
+    }
 
     private static String replaceInCodeOnly(String source, java.util.regex.Pattern namePattern, String newName) {
         String[] lines = source.split("\n", -1);
