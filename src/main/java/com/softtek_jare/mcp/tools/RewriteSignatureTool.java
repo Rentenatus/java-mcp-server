@@ -60,7 +60,9 @@ public class RewriteSignatureTool extends BaseJavaTool {
     @Override protected String toolName() { return "rewrite_signature"; }
     @Override protected String toolDescription() {
         return "Add, remove, or rename parameters; change return type. Two modes: "
-                + "signature_only (declaration only) or signature_and_callers (declaration + all call sites).";
+                + "signature_only (rename just the declaration, no caller updates — useful for "
+                + "interface methods or staged refactoring) or signature_and_callers (default: "
+                + "declaration + TODO markers at all call sites for manual review).";
     }
     @Override protected Map<String, Object> toolProperties() {
         return Map.of(
