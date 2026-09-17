@@ -114,11 +114,7 @@ vibe mcp add my-mcp-server \
   --args '["-jar", "D:/git_java-mcp-server/target/java-mcp-server-standalone.jar"]'
 ```
 
-Or from inside Vibe:
 
-```
-/mcp add my-mcp-server
-```
 
 ### Claude Desktop / Claude Code
 
