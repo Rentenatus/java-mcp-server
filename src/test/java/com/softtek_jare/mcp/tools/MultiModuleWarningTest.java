@@ -22,7 +22,7 @@
  * SOFTWARE.
  */
 
-package com.softtek_jare.mcp.model;
+package com.softtek_jare.mcp.tools;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -34,59 +34,53 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
+import com.softtek_jare.mcp.model.Fingerprint;
+import com.softtek_jare.mcp.model.ProjectEntry;
+
 /**
- * Tests for the {@code editable} field added to {@link ProjectEntry}.
+ * Tests for {@link BaseJavaTool#formatMultiModuleWarning}.
  *
  * @author Janusch Rentenatus
  */
-class ProjectEntryTest {
+class MultiModuleWarningTest {
 
     @Test
-    void editableTrueByDefault() {
-        ProjectEntry entry = makeEntry(true);
-        assertTrue(entry.editable());
+    void noWarningWhenSingleModule() {
+        ProjectEntry entry = makeEntry(1, 1);
+        assertEquals("", BaseJavaTool.formatMultiModuleWarning(entry));
     }
 
     @Test
-    void editableFalseWhenSet() {
-        ProjectEntry entry = makeEntry(false);
-        assertFalse(entry.editable());
+    void noWarningWhenModulesEqual() {
+        ProjectEntry entry = makeEntry(3, 3);
+        assertEquals("", BaseJavaTool.formatMultiModuleWarning(entry));
     }
 
     @Test
-    void editablePreservedOnExpiryCopy() {
-        ProjectEntry original = makeEntry(false);
-        // markExpired copies the entry with expired=true but must keep editable
-        ProjectEntry expired = new ProjectEntry(
-            original.name(), original.alias(), original.expiryDate(),
-            original.projectDir(), original.launcher(), original.model(),
-            original.buildType(), original.delomboked(), original.lombokVersion(),
-            original.originalProjectDir(), original.originalSource(),
-            original.sourceFingerprints(), true, original.editable(), 1, 1
-        );
-        assertFalse(expired.editable());
+    void warningWhenMoreDetectedThanLoaded() {
+        ProjectEntry entry = makeEntry(3, 1);
+        String warning = BaseJavaTool.formatMultiModuleWarning(entry);
+        assertTrue(warning.contains("3 modules detected"));
+        assertTrue(warning.contains("1 loaded"));
+        assertTrue(warning.contains("2 unloaded modules"));
+        assertTrue(warning.contains("Load all modules"));
     }
 
     @Test
-    void editableTruePreservedOnExpiryCopy() {
-        ProjectEntry original = makeEntry(true);
-        ProjectEntry expired = new ProjectEntry(
-            original.name(), original.alias(), original.expiryDate(),
-            original.projectDir(), original.launcher(), original.model(),
-            original.buildType(), original.delomboked(), original.lombokVersion(),
-            original.originalProjectDir(), original.originalSource(),
-            original.sourceFingerprints(), true, original.editable(), 1, 1
-        );
-        assertTrue(expired.editable());
+    void warningUsesSingularForOneUnloaded() {
+        ProjectEntry entry = makeEntry(2, 1);
+        String warning = BaseJavaTool.formatMultiModuleWarning(entry);
+        assertTrue(warning.contains("1 unloaded module."));
+        assertFalse(warning.contains("1 unloaded modules."));
     }
 
-    private static ProjectEntry makeEntry(boolean editable) {
+    private static ProjectEntry makeEntry(int modulesDetected, int modulesLoaded) {
         return new ProjectEntry(
             "test-project", "test-project", Instant.now().plusSeconds(600),
-            Path.of("/tmp/test"), null, null, "RAW",
+            Path.of("/tmp/test"), null, null, "MAVEN",
             false, null,
             Path.of("/tmp/test"), "test-source",
-            Map.of(), false, editable, 1, 1
+            Map.of(), false, true, modulesDetected, modulesLoaded
         );
     }
 }

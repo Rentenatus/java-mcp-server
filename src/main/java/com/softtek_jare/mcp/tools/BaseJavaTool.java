@@ -232,6 +232,18 @@ public abstract class BaseJavaTool implements McpTool {
     }
 
 /**
+ * Formats a multi-module warning when detected modules exceed loaded modules.
+ */
+    protected static String formatMultiModuleWarning(ProjectEntry entry) {
+        if (entry.modulesDetected() <= entry.modulesLoaded()) return "";
+        int unloaded = entry.modulesDetected() - entry.modulesLoaded();
+        return "> WARNING: " + entry.modulesDetected() + " modules detected, "
+                + entry.modulesLoaded() + " loaded. Edits may miss references in "
+                + unloaded + " unloaded module" + (unloaded > 1 ? "s" : "") + ". "
+                + "Load all modules before editing for full coverage.\n\n";
+    }
+
+/**
  * Builds an error result with the given message.
  */
     protected static CallToolResult error(String message) {

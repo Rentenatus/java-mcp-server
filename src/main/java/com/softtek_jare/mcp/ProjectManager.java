@@ -135,11 +135,14 @@ public class ProjectManager {
             // Determine editable: JAR sources are hard-locked to false
             boolean isJar = source != null && source.toLowerCase().endsWith(".jar");
             boolean editable = isJar ? false : (editableOverride != null ? editableOverride : true);
+            int modulesDetected = countModules(projectDir, buildInfo);
+            int modulesLoaded = 1;
 
             ProjectEntry entry = new ProjectEntry(name, alias, expiryDate,
                     sourceToAnalyze, launcher, model, buildInfo.type().name(),
                     delomboked, lombokVersion,
-                    projectDir, source, buildFingerprints(projectDir), false, editable);
+                    projectDir, source, buildFingerprints(projectDir), false, editable,
+                    modulesDetected, modulesLoaded);
             entries.put(name, entry);
             LOG.info("Project '{}' loaded successfully ({} types, delomboked={})",
                     name, model.getAllTypes().size(), delomboked);
@@ -226,7 +229,8 @@ public class ProjectManager {
                     entry.projectDir(), entry.launcher(), entry.model(),
                     entry.buildType(), entry.delomboked(), entry.lombokVersion(),
                     entry.originalProjectDir(), entry.originalSource(),
-                    entry.sourceFingerprints(), true, entry.editable()));
+                    entry.sourceFingerprints(), true, entry.editable(),
+                    entry.modulesDetected(), entry.modulesLoaded()));
                 LOG.info("Project '{}' expired at {}", entry.name(), entry.expiryDate());
                 newlyExpired.add(entry.name());
             }
@@ -329,5 +333,57 @@ public class ProjectManager {
     public static String deriveName(Path projectDir, String source) {
         String name = projectDir.getFileName().toString();
         return name;
+    }
+
+/**
+ * Counts the number of modules in a multi-module build.
+ * Maven: counts <module> entries in pom.xml. Gradle: counts include directives in settings.gradle.
+ * Returns 1 for single-module projects (the project itself).
+ */
+    private static int countModules(Path projectDir, BuildDetector.BuildInfo buildInfo) {
+        if (buildInfo.type() == BuildDetector.BuildType.MAVEN) {
+            Path pom = projectDir.resolve("pom.xml");
+            if (Files.exists(pom)) {
+                try {
+                    String content = Files.readString(pom);
+                    int count = 0;
+                    int idx = 0;
+                    while ((idx = content.indexOf("<module>", idx)) != -1) {
+                        count++;
+                        idx += 8;
+                    }
+                    return Math.max(count, 1);
+                } catch (IOException e) {
+                    return 1;
+                }
+            }
+        } else if (buildInfo.type() == BuildDetector.BuildType.GRADLE) {
+            for (String settingsFile : new String[]{"settings.gradle", "settings.gradle.kts"}) {
+                Path settings = projectDir.resolve(settingsFile);
+                if (Files.exists(settings)) {
+                    try {
+                        String content = Files.readString(settings);
+                        int count = 0;
+                        for (String line : content.split("\\R")) {
+                            String trimmed = line.trim();
+                            if (trimmed.startsWith("include") || trimmed.startsWith("include(")) {
+                                // count comma-separated module names in include directive
+                                int start = trimmed.indexOf("'");
+                                if (start < 0) start = trimmed.indexOf("\"");
+                                if (start >= 0) {
+                                    String rest = trimmed.substring(start);
+                                    count += rest.split("['\"]").length / 2;
+                                }
+                                if (count == 0) count = 1; // at least one
+                            }
+                        }
+                        return Math.max(count, 1);
+                    } catch (IOException e) {
+                        return 1;
+                    }
+                }
+            }
+        }
+        return 1;
     }
 }
