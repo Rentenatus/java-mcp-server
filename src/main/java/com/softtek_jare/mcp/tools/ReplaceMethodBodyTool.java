@@ -225,7 +225,14 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
                 result.append(lines[i]); // keep the opening brace line
             } else if (i > openBraceIdx && i <= closeBraceIdx) {
                 if (i == closeBraceIdx) {
-                    result.append(indent).append(newBody.stripIndent()).append("\n");
+                    // Indent each line of the new body
+                    String bodyIndent = indent + "    ";
+                    String[] bodyLines = newBody.stripIndent().split("\n", -1);
+                    for (int j = 0; j < bodyLines.length; j++) {
+                        result.append(bodyIndent).append(bodyLines[j]);
+                        if (j < bodyLines.length - 1) result.append("\n");
+                    }
+                    result.append("\n");
                     result.append(lines[i]); // keep the closing brace line
                 }
                 // skip old body lines
