@@ -46,6 +46,7 @@ import org.yaml.snakeyaml.Yaml;
  * The {@code JavaMcpServer} class.
  *
  * @author Alejandro Ferreira
+ * @author Janusch Rentenatus
  */
 public class JavaMcpServer {
 

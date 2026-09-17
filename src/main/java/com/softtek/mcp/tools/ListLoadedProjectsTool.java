@@ -37,6 +37,7 @@ import java.util.Map;
  * The {@code ListLoadedProjectsTool} class.
  *
  * @author Alejandro Ferreira
+ * @author Janusch Rentenatus
  */
 public class ListLoadedProjectsTool extends BaseJavaTool {
 

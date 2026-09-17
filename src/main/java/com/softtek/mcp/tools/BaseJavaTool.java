@@ -54,6 +54,7 @@ import org.slf4j.LoggerFactory;
  * The {@code BaseJavaTool} class.
  *
  * @author Alejandro Ferreira
+ * @author Janusch Rentenatus
  */
 public abstract class BaseJavaTool implements McpTool {
 

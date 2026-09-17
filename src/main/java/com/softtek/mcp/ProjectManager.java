@@ -50,6 +50,7 @@ import spoon.reflect.CtModel;
  * The {@code ProjectManager} class.
  *
  * @author Alejandro Ferreira
+ * @author Janusch Rentenatus
  */
 public class ProjectManager {
 

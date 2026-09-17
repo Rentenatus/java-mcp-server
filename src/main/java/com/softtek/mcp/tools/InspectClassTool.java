@@ -40,6 +40,7 @@ import java.util.stream.Collectors;
  * The {@code InspectClassTool} class.
  *
  * @author Alejandro Ferreira
+ * @author Janusch Rentenatus
  */
 public class InspectClassTool extends BaseJavaTool {
 

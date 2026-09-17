@@ -39,6 +39,7 @@ import java.util.stream.Collectors;
  * The {@code ListMethodsTool} class.
  *
  * @author Alejandro Ferreira
+ * @author Janusch Rentenatus
  */
 public class ListMethodsTool extends BaseJavaTool {
 

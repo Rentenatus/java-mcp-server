@@ -37,6 +37,7 @@ import java.util.Map;
  * The {@code InspectFieldTool} class.
  *
  * @author Alejandro Ferreira
+ * @author Janusch Rentenatus
  */
 public class InspectFieldTool extends BaseJavaTool {
 
