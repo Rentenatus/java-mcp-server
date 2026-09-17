@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.softtek.ams</groupId>
+    <groupId>com.softtek_jare.ams</groupId>
     <artifactId>java-mcp-server</artifactId>
     <version>1.0.6</version>
 
@@ -119,7 +119,7 @@
                     </descriptorRefs>
                     <archive>
                         <manifest>
-                            <mainClass>com.softtek.mcp.JavaMcpServer</mainClass>
+                            <mainClass>com.softtek_jare.mcp.JavaMcpServer</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
