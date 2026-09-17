@@ -178,45 +178,27 @@ public class RewriteSignatureTool extends BaseJavaTool {
                 }
             }
         }
-        // Write each caller file — the AST was already updated by setSimpleName etc.
-        // For signature changes, we need to rewrite the argument lists at call sites.
-        // Since we can't easily parse new argument expressions from text, we write
-        // a warning comment at each call site for manual review.
+        // Insert TODO comments at call sites — text-based search avoids stale AST positions
         int count = 0;
         for (java.nio.file.Path file : callerFiles) {
             try {
                 String source = java.nio.file.Files.readString(file);
-                // Insert a TODO comment before each call line
                 String[] lines = source.split("\n", -1);
-                java.util.Set<Integer> callLines = new java.util.HashSet<>();
-                for (CtType<?> type : entry.model().getAllTypes()) {
-                    if (type.getPosition().getFile() == null) continue;
-                    if (!type.getPosition().getFile().toPath().normalize().equals(file.normalize())) continue;
-                    for (CtMethod<?> method : type.getMethods()) {
-                        if (method.getBody() == null) continue;
-                        var invocations = method.getBody().getElements(new TypeFilter<>(CtInvocation.class));
-                        for (var inv : invocations) {
-                            var exec = inv.getExecutable();
-                            if (exec.getDeclaringType() != null
-                                    && exec.getDeclaringType().getQualifiedName().equals(targetType.getQualifiedName())
-                                    && exec.getSimpleName().equals(methodName)) {
-                                int line = inv.getPosition().getLine();
-                                if (line > 0) callLines.add(line - 1); // 0-indexed
-                            }
-                        }
+                StringBuilder newSource = new StringBuilder();
+                for (int i = 0; i < lines.length; i++) {
+                    // Search for methodName( in code (not in comments or strings)
+                    String trimmed = lines[i].trim();
+                    boolean isComment = trimmed.startsWith("//") || trimmed.startsWith("*")
+                            || trimmed.startsWith("/*") || trimmed.startsWith("/**");
+                    if (!isComment && lines[i].contains(methodName + "(")) {
+                        newSource.append("// TODO: signature of ").append(methodName)
+                                .append(" changed — review arguments\n");
+                        count++;
                     }
+                    newSource.append(lines[i]);
+                    if (i < lines.length - 1) newSource.append("\n");
                 }
-                if (!callLines.isEmpty()) {
-                    StringBuilder newSource = new StringBuilder();
-                    for (int i = 0; i < lines.length; i++) {
-                        if (callLines.contains(i)) {
-                            newSource.append("// TODO: signature of ").append(methodName)
-                                    .append(" changed — review arguments\n");
-                            count++;
-                        }
-                        newSource.append(lines[i]);
-                        if (i < lines.length - 1) newSource.append("\n");
-                    }
+                if (count > 0) {
                     entry = editManager.writeFile(entry, file, newSource.toString(), null);
                     manager.updateEntry(entry);
                     editManager.logEdit(toolName());
