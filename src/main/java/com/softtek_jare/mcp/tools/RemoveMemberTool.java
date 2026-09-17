@@ -40,6 +40,8 @@ import java.util.Map;
 
 import spoon.reflect.code.CtFieldAccess;
 import spoon.reflect.code.CtInvocation;
+import spoon.reflect.declaration.CtField;
+import spoon.reflect.declaration.CtMethod;
 import spoon.reflect.declaration.CtType;
 import spoon.reflect.visitor.filter.TypeFilter;
 
@@ -109,7 +111,28 @@ public class RemoveMemberTool extends BaseJavaTool {
         if (file == null) return error("Cannot determine source file.");
 
         String source = Files.readString(file);
-        String newSource = removeMemberFromSource(source, memberName, scope);
+        String newSource;
+        if ("method".equals(scope)) {
+            CtMethod<?> method = targetType.getMethods().stream()
+                    .filter(m -> m.getSimpleName().equals(memberName))
+                    .findFirst()
+                    .orElse(null);
+            if (method == null) {
+                return error("Method '" + memberName + "' not found in " + className);
+            }
+            newSource = removeMethodByPosition(source, method);
+        } else if ("field".equals(scope)) {
+            CtField<?> field = targetType.getFields().stream()
+                    .filter(f -> f.getSimpleName().equals(memberName))
+                    .findFirst()
+                    .orElse(null);
+            if (field == null) {
+                return error("Field '" + memberName + "' not found in " + className);
+            }
+            newSource = removeFieldByPosition(source, field);
+        } else {
+            return error("scope must be 'method' or 'field'");
+        }
         if (newSource.equals(source)) {
             return error("Member '" + memberName + "' not found in source.");
         }
@@ -165,45 +188,36 @@ public class RemoveMemberTool extends BaseJavaTool {
         return refs;
     }
 
-    private String removeMemberFromSource(String source, String memberName, String scope) {
-        // Simple text-based removal: find lines containing the member declaration and remove them
+    private String removeMethodByPosition(String source, CtMethod<?> method) {
+        int startLine = method.getPosition().getLine();
+        int endLine = method.getPosition().getEndLine();
+        if (startLine < 1 || endLine < startLine) return source;
         String[] lines = source.split("\n", -1);
+        int startIdx = startLine - 1; // 0-indexed
+        int endIdx = Math.min(endLine, lines.length); // exclusive
         StringBuilder result = new StringBuilder();
-        boolean skipping = false;
-        int braceDepth = 0;
-        for (String line : lines) {
-            String trimmed = line.trim();
-            if (!skipping) {
-                if ("method".equals(scope) && trimmed.contains(memberName + "(") && !trimmed.contains("class ")) {
-                    skipping = true;
-                    braceDepth = countBraces(trimmed);
-                    if (braceDepth == 0) continue; // single-line method
-                    continue;
-                } else if ("field".equals(scope) && trimmed.contains(" " + memberName + " ")
-                        && !trimmed.contains("(") && !trimmed.contains("class ")) {
-                    continue; // skip field line
-                } else if ("field".equals(scope) && trimmed.contains(" " + memberName + ";")) {
-                    continue;
-                } else {
-                    result.append(line).append("\n");
-                }
-            } else {
-                braceDepth += countBraces(trimmed);
-                if (braceDepth <= 0) {
-                    skipping = false;
-                }
-            }
+        for (int i = 0; i < lines.length; i++) {
+            if (i >= startIdx && i < endIdx) continue; // skip method lines
+            result.append(lines[i]);
+            if (i < lines.length - 1) result.append("\n");
         }
         return result.toString();
     }
 
-    private int countBraces(String line) {
-        int depth = 0;
-        for (char c : line.toCharArray()) {
-            if (c == '{') depth++;
-            else if (c == '}') depth--;
+    private String removeFieldByPosition(String source, CtField<?> field) {
+        int startLine = field.getPosition().getLine();
+        int endLine = field.getPosition().getEndLine();
+        if (startLine < 1) return source;
+        String[] lines = source.split("\n", -1);
+        int startIdx = startLine - 1;
+        int endIdx = Math.min(Math.max(endLine, startLine), lines.length);
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < lines.length; i++) {
+            if (i >= startIdx && i < endIdx) continue; // skip field lines
+            result.append(lines[i]);
+            if (i < lines.length - 1) result.append("\n");
         }
-        return depth;
+        return result.toString();
     }
 
     private List<String> scanStringLiterals(ProjectEntry entry, String memberName) {
