@@ -195,6 +195,7 @@ public class ProjectManager {
         if (buildInfo.type() == BuildDetector.BuildType.MAVEN) {
             try {
                 launcher = new MavenLauncher(projectDir.toAbsolutePath().toString(), MavenLauncher.SOURCE_TYPE.APP_SOURCE);
+                launcher.getEnvironment().setCommentEnabled(true);
                 LOG.info("Using MavenLauncher for {}", projectDir);
                 return launcher;
             } catch (Exception e) {
@@ -205,6 +206,7 @@ public class ProjectManager {
         launcher = new Launcher();
         launcher.getEnvironment().setNoClasspath(true);
         launcher.getEnvironment().setAutoImports(true);
+        launcher.getEnvironment().setCommentEnabled(true);
 
         Path srcDir = findSourceDir(projectDir, buildInfo);
         if (srcDir != null && Files.isDirectory(srcDir)) {
