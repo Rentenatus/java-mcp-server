@@ -170,7 +170,7 @@ public abstract class BaseJavaTool implements McpTool {
  * @throws IllegalArgumentException if the file was changed externally or the
  *                                  expected fingerprint does not match
  */
-    protected static void validateFingerprint(ProjectEntry entry, java.nio.file.Path file, String expectedFingerprint) {
+    public static void validateFingerprint(ProjectEntry entry, java.nio.file.Path file, String expectedFingerprint) {
         java.nio.file.Path normalized = file.normalize();
         Fingerprint stored = entry.sourceFingerprints().get(normalized);
         if (stored == null) return; // no fingerprint for this file — cannot check
@@ -210,7 +210,7 @@ public abstract class BaseJavaTool implements McpTool {
 /**
  * Serializes a fingerprint to a string for use as expectedFingerprint parameter.
  */
-    protected static String fingerprintToString(Fingerprint fp) {
+    public static String fingerprintToString(Fingerprint fp) {
         return fp.lastModified() + "|" + fp.fileSize();
     }
 
