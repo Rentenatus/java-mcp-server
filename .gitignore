@@ -36,4 +36,7 @@ build/
 .DS_Store
 
 ### GenAI ###
-AGENTS.mdspoon.classpath-app.tmp
+AGENTS.md
+
+### Spoon ###
+spoon.classpath-app.tmp
