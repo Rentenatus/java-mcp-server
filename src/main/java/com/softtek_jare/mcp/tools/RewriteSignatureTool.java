@@ -122,7 +122,7 @@ public class RewriteSignatureTool extends BaseJavaTool {
         // Replace the first occurrence of the old method signature pattern
         String oldDecl = target.getType().getSimpleName() + " " + methodName + "(" + getParamString(target) + ")";
         String newDecl = retType + " " + methodName + "(" + params + ")";
-        String newSource = source.replace(oldDecl, newDecl);
+        String newSource = source.replaceFirst(java.util.regex.Pattern.quote(oldDecl), java.util.regex.Matcher.quoteReplacement(newDecl));
         if (newSource.equals(source)) {
             return error("Could not find method declaration to replace. Pattern: " + oldDecl);
         }
