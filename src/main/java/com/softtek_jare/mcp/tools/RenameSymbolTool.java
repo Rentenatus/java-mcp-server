@@ -110,7 +110,7 @@ public class RenameSymbolTool extends BaseJavaTool {
         // Write affected files via EditManager — text-based replacement preserves formatting
         for (Path file : affectedFiles) {
             String source = Files.readString(file);
-            String newContent = source.replace(oldName, newName);
+            String newContent = source.replaceAll("\\b" + java.util.regex.Pattern.quote(oldName) + "\\b", newName);
             if (!newContent.equals(source)) {
                 entry = editManager.writeFile(entry, file, newContent, null);
                 manager.updateEntry(entry);
