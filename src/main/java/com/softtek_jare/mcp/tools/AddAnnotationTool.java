@@ -36,7 +36,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 
-import spoon.reflect.declaration.CtAnnotation;
+import spoon.reflect.declaration.CtField;
 import spoon.reflect.declaration.CtMethod;
 import spoon.reflect.declaration.CtType;
 
@@ -99,29 +99,60 @@ public class AddAnnotationTool extends BaseJavaTool {
         if (file == null) return error("Cannot determine source file.");
 
         String source = Files.readString(file);
-        String newSource;
+        String[] lines = source.split("\n", -1);
+        int insertLine; // 0-indexed line before which to insert the annotation
 
         if ("class".equals(targetType)) {
-            // Insert before class declaration
-            int classIdx = source.indexOf("class " + type.getSimpleName());
-            if (classIdx < 0) classIdx = source.indexOf("interface " + type.getSimpleName());
-            if (classIdx < 0) classIdx = source.indexOf("enum " + type.getSimpleName());
-            if (classIdx < 0) return error("Cannot find class declaration.");
-            newSource = source.substring(0, classIdx) + annotationSrc + "\n" + source.substring(classIdx);
+            int declLine = type.getPosition().getLine();
+            if (declLine < 1) return error("Cannot determine class declaration line.");
+            insertLine = declLine - 1;
+            // Walk backwards to skip modifiers (public, final, abstract, etc.)
+            while (insertLine > 0 && lines[insertLine].trim().isEmpty()) insertLine--;
         } else if ("method".equals(targetType)) {
             if (targetName == null) return error("targetName required for method annotations.");
-            int methodIdx = source.indexOf(targetName + "(");
-            if (methodIdx < 0) return error("Method '" + targetName + "' not found.");
-            newSource = source.substring(0, methodIdx) + annotationSrc + "\n    " + source.substring(methodIdx);
+            CtMethod<?> method = type.getMethods().stream()
+                    .filter(m -> m.getSimpleName().equals(targetName))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("Method '" + targetName + "' not found in " + className));
+            // Duplicate check
+            boolean alreadyHas = method.getAnnotations().stream()
+                    .anyMatch(a -> annotationMatches(a.getAnnotationType().getQualifiedName(), annotation));
+            if (alreadyHas) return error("Method '" + targetName + "' already has annotation @" + annotation + ".");
+            int declLine = method.getPosition().getLine();
+            if (declLine < 1) return error("Cannot determine method declaration line.");
+            insertLine = declLine - 1;
+            // Walk backwards to skip modifiers
+            while (insertLine > 0 && lines[insertLine].trim().isEmpty()) insertLine--;
         } else if ("field".equals(targetType)) {
             if (targetName == null) return error("targetName required for field annotations.");
-            int fieldIdx = source.indexOf(" " + targetName + " ");
-            if (fieldIdx < 0) fieldIdx = source.indexOf(" " + targetName + ";");
-            if (fieldIdx < 0) return error("Field '" + targetName + "' not found.");
-            newSource = source.substring(0, fieldIdx + 1) + annotationSrc + "\n    " + source.substring(fieldIdx + 1);
+            CtField<?> field = type.getFields().stream()
+                    .filter(f -> f.getSimpleName().equals(targetName))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("Field '" + targetName + "' not found in " + className));
+            // Duplicate check
+            boolean alreadyHas = field.getAnnotations().stream()
+                    .anyMatch(a -> annotationMatches(a.getAnnotationType().getQualifiedName(), annotation));
+            if (alreadyHas) return error("Field '" + targetName + "' already has annotation @" + annotation + ".");
+            int declLine = field.getPosition().getLine();
+            if (declLine < 1) return error("Cannot determine field declaration line.");
+            insertLine = declLine - 1;
+            // Walk backwards to skip modifiers
+            while (insertLine > 0 && lines[insertLine].trim().isEmpty()) insertLine--;
         } else {
             return error("targetType must be 'class', 'method', or 'field'");
         }
+
+        // Insert annotation line before the declaration
+        String indent = "";
+        for (char c : lines[insertLine].toCharArray()) {
+            if (c == ' ') indent += " ";
+            else break;
+        }
+        String[] newLines = new String[lines.length + 1];
+        System.arraycopy(lines, 0, newLines, 0, insertLine);
+        newLines[insertLine] = indent + annotationSrc;
+        System.arraycopy(lines, insertLine, newLines, insertLine + 1, lines.length - insertLine);
+        String newSource = String.join("\n", newLines);
 
         entry = editManager.writeFile(entry, file, newSource, null);
         manager.updateEntry(entry);
@@ -132,5 +163,11 @@ public class AddAnnotationTool extends BaseJavaTool {
         sb.append("\n");
         sb.append(formatMultiModuleWarning(entry));
         return ok(sb);
+    }
+
+    private static boolean annotationMatches(String qualifiedName, String search) {
+        if (qualifiedName.equals(search)) return true;
+        int dot = qualifiedName.lastIndexOf('.');
+        return dot >= 0 && qualifiedName.substring(dot + 1).equals(search);
     }
 }
