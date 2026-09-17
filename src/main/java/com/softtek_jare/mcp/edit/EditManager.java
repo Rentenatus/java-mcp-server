@@ -24,7 +24,6 @@
 
 package com.softtek_jare.mcp.edit;
 
-import com.softtek_jare.mcp.model.Fingerprint;
 import com.softtek_jare.mcp.model.ProjectEntry;
 import com.softtek_jare.mcp.tools.BaseJavaTool;
 
@@ -80,14 +79,14 @@ public class EditManager {
      *   <li>Optimistic lock check (fingerprint validation)</li>
      *   <li>Detect and preserve existing line-ending convention</li>
      *   <li>Write to temp file, then atomic rename</li>
-     *   <li>Re-set fingerprint after write</li>
+     *   <li>Mark model as dirty (fingerprints stay at load-time for dirty detection)</li>
      * </ol>
      *
      * @param entry              the loaded project entry
      * @param file               the target file on disk
      * @param newContent         the new file content (may use any line ending)
      * @param expectedFingerprint optional fingerprint; null means not provided
-     * @return the updated project entry with re-set fingerprints
+     * @return the updated project entry with modelDirty=true
      * @throws IOException if the write fails
      * @throws IllegalArgumentException if the optimistic lock check fails
      */
@@ -121,20 +120,14 @@ public class EditManager {
             throw e;
         }
 
-        // 5. Re-set fingerprint
-        Fingerprint newFp = new Fingerprint(
-                Files.getLastModifiedTime(file).toMillis(),
-                Files.size(file));
-        Map<Path, Fingerprint> updatedFps = new HashMap<>(entry.sourceFingerprints());
-        updatedFps.put(file.normalize(), newFp);
-
+        // 5. Mark model as dirty — fingerprints stay at load-time for dirty detection
         return new ProjectEntry(
                 entry.name(), entry.alias(), entry.expiryDate(),
                 entry.projectDir(), entry.launcher(), entry.model(),
                 entry.buildType(), entry.delomboked(), entry.lombokVersion(),
                 entry.originalProjectDir(), entry.originalSource(),
-                updatedFps, entry.expired(), entry.editable(),
-                entry.modulesDetected(), entry.modulesLoaded());
+                entry.sourceFingerprints(), entry.expired(), entry.editable(),
+                entry.modulesDetected(), entry.modulesLoaded(), true);
     }
 
     /**

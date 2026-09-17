@@ -142,7 +142,7 @@ public class ProjectManager {
                     sourceToAnalyze, launcher, model, buildInfo.type().name(),
                     delomboked, lombokVersion,
                     projectDir, source, buildFingerprints(projectDir), false, editable,
-                    modulesDetected, modulesLoaded);
+                    modulesDetected, modulesLoaded, false);
             entries.put(name, entry);
             LOG.info("Project '{}' loaded successfully ({} types, delomboked={})",
                     name, model.getAllTypes().size(), delomboked);
@@ -153,6 +153,46 @@ public class ProjectManager {
             }
             projectLoader.cleanup(projectDir);
             throw new ProjectLoadException("PARSE_ERROR", "Failed to parse project: " + e.getMessage());
+        }
+    }
+
+/**
+ * Updates a loaded project entry in place (used by edit tools to set modelDirty).
+ */
+    public void updateEntry(ProjectEntry entry) {
+        entries.put(entry.name(), entry);
+    }
+
+/**
+ * Marks a loaded project as dirty (model is stale after edits).
+ */
+    public void markDirty(String nameOrAlias) {
+        ProjectEntry entry = find(nameOrAlias);
+        if (entry == null) return;
+        if (entry.modelDirty()) return;
+        entries.put(entry.name(), new ProjectEntry(
+            entry.name(), entry.alias(), entry.expiryDate(),
+            entry.projectDir(), entry.launcher(), entry.model(),
+            entry.buildType(), entry.delomboked(), entry.lombokVersion(),
+            entry.originalProjectDir(), entry.originalSource(),
+            entry.sourceFingerprints(), entry.expired(), entry.editable(),
+            entry.modulesDetected(), entry.modulesLoaded(), true));
+    }
+
+/**
+ * Marks all loaded projects as dirty.
+ */
+    public void markAllDirty() {
+        for (var entry : new ArrayList<>(entries.values())) {
+            if (!entry.modelDirty()) {
+                entries.put(entry.name(), new ProjectEntry(
+                    entry.name(), entry.alias(), entry.expiryDate(),
+                    entry.projectDir(), entry.launcher(), entry.model(),
+                    entry.buildType(), entry.delomboked(), entry.lombokVersion(),
+                    entry.originalProjectDir(), entry.originalSource(),
+                    entry.sourceFingerprints(), entry.expired(), entry.editable(),
+                    entry.modulesDetected(), entry.modulesLoaded(), true));
+            }
         }
     }
 
@@ -230,7 +270,7 @@ public class ProjectManager {
                     entry.buildType(), entry.delomboked(), entry.lombokVersion(),
                     entry.originalProjectDir(), entry.originalSource(),
                     entry.sourceFingerprints(), true, entry.editable(),
-                    entry.modulesDetected(), entry.modulesLoaded()));
+                    entry.modulesDetected(), entry.modulesLoaded(), entry.modelDirty()));
                 LOG.info("Project '{}' expired at {}", entry.name(), entry.expiryDate());
                 newlyExpired.add(entry.name());
             }

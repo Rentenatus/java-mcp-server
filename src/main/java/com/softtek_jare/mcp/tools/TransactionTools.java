@@ -95,6 +95,7 @@ public class TransactionTools extends BaseJavaTool {
             int pending = editManager.getPendingChangeCount();
             boolean success = editManager.commitTransaction();
             if (success) {
+                manager.markAllDirty();
                 return ok("Transaction committed. " + pending + " file(s) written atomically.");
             } else {
                 return error("Commit failed. All temp files cleaned up. Transaction is still open — "

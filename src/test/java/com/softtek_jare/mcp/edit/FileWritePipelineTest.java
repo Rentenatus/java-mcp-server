@@ -53,7 +53,7 @@ class FileWritePipelineTest {
     Path tempDir;
 
     @Test
-    void writeFileSucceedsAndUpdatesFingerprint() throws Exception {
+    void writeFileSucceedsAndMarksModelDirty() throws Exception {
         Path file = tempDir.resolve("A.java");
         Files.writeString(file, "class A {}");
         Fingerprint fp = new Fingerprint(Files.getLastModifiedTime(file).toMillis(), Files.size(file));
@@ -63,8 +63,9 @@ class FileWritePipelineTest {
         ProjectEntry updated = mgr.writeFile(entry, file, "class A { int x; }", null);
 
         assertEquals("class A { int x; }", Files.readString(file).trim());
-        Fingerprint newFp = updated.sourceFingerprints().get(file.normalize());
-        assertEquals(Files.getLastModifiedTime(file).toMillis(), newFp.lastModified());
+        assertTrue(updated.modelDirty());
+        Fingerprint storedFp = updated.sourceFingerprints().get(file.normalize());
+        assertEquals(fp, storedFp); // fingerprint unchanged — stays at load-time
     }
 
     @Test
@@ -185,7 +186,7 @@ class FileWritePipelineTest {
             projectDir, null, null, "RAW",
             false, null,
             projectDir, "test-source",
-            new HashMap<>(fingerprints), false, true, 1, 1
+            new HashMap<>(fingerprints), false, true, 1, 1, false
         );
     }
 }

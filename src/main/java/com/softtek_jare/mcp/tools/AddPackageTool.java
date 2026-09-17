@@ -83,6 +83,7 @@ public class AddPackageTool extends BaseJavaTool {
             Path infoFile = packageDir.resolve("package-info.java");
             Files.writeString(infoFile, "package " + packageName + ";\n\n");
         }
+        manager.markDirty(name);
 
         return ok("Package created: " + packageName + " at " + packageDir
                 + (genInfo ? " (with package-info.java)" : "")

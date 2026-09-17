@@ -117,6 +117,7 @@ public class RenameSymbolTool extends BaseJavaTool {
             if (type != null) {
                 String newContent = type.toString();
                 entry = editManager.writeFile(entry, file, newContent, null);
+                manager.updateEntry(entry);
             }
         }
 

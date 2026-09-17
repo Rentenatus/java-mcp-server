@@ -130,6 +130,7 @@ public class AddFieldTool extends BaseJavaTool {
                 + source.substring(lastBrace);
 
         entry = editManager.writeFile(entry, file, newContent, null);
+        manager.updateEntry(entry);
 
         StringBuilder sb = new StringBuilder();
         sb.append("Field added: ").append(className).append(".").append(fieldName).append("\n");

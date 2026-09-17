@@ -128,6 +128,7 @@ public class RewriteSignatureTool extends BaseJavaTool {
         }
 
         entry = editManager.writeFile(entry, file, newSource, null);
+        manager.updateEntry(entry);
 
         StringBuilder sb = new StringBuilder();
         sb.append("Signature changed: ").append(oldSignature).append(" -> ").append(newDecl).append("\n");

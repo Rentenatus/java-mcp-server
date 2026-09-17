@@ -78,7 +78,7 @@ class EditableGuardTest {
             Path.of("/tmp/test"), null, null, "RAW",
             false, null,
             Path.of("/tmp/test"), "test-source",
-            Map.of(), false, editable, 1, 1
+            Map.of(), false, editable, 1, 1, false
         );
     }
 

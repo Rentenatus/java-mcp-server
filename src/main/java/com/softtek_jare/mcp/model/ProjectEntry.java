@@ -52,5 +52,6 @@ public record ProjectEntry(
         boolean expired,
         boolean editable,
         int modulesDetected,
-        int modulesLoaded
+        int modulesLoaded,
+        boolean modelDirty
 ) {}

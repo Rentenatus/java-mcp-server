@@ -171,6 +171,11 @@ public abstract class BaseJavaTool implements McpTool {
  *                                  expected fingerprint does not match
  */
     public static void validateFingerprint(ProjectEntry entry, java.nio.file.Path file, String expectedFingerprint) {
+        // If model is dirty (edits have been made since load), skip disk-vs-fingerprint comparison.
+        // The fingerprints represent load-time state and will not match disk after our own edits.
+        // The caller should reload the project for a clean fingerprint check.
+        if (entry.modelDirty()) return;
+
         java.nio.file.Path normalized = file.normalize();
         Fingerprint stored = entry.sourceFingerprints().get(normalized);
         if (stored == null) return; // no fingerprint for this file — cannot check
@@ -244,6 +249,26 @@ public abstract class BaseJavaTool implements McpTool {
     }
 
 /**
+ * Formats a model-dirty warning for projects with stale models after edits.
+ */
+    protected static String formatModelDirtyWarning(ProjectManager manager) {
+        List<String> dirty = new ArrayList<>();
+        for (var entry : manager.list()) {
+            if (entry.modelDirty()) dirty.add(entry.name());
+        }
+        if (dirty.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        sb.append("> ⚠️ **Model is dirty:** ");
+        for (int i = 0; i < dirty.size(); i++) {
+            if (i > 0) sb.append(", ");
+            sb.append("`").append(dirty.get(i)).append("`");
+        }
+        sb.append("\n> Edits have been made since load. Data may be stale.\n");
+        sb.append("> Call `reload_java_project` to refresh the model.\n\n");
+        return sb.toString();
+    }
+
+/**
  * Builds an error result with the given message.
  */
     protected static CallToolResult error(String message) {
@@ -258,6 +283,7 @@ public abstract class BaseJavaTool implements McpTool {
  */
     protected CallToolResult ok(String content) {
         String warning = formatExpiredWarning(expiredNames);
+        warning += formatModelDirtyWarning(manager);
         return McpSchema.CallToolResult.builder()
                 .addTextContent(warning + content)
                 .isError(false)

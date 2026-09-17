@@ -105,6 +105,7 @@ public class AddClassTool extends BaseJavaTool {
         src.append("}\n");
 
         Files.writeString(file, src.toString());
+        manager.markDirty(name);
 
         return ok("Class created: " + packageName + "." + className + " at " + file
                 + "\n" + formatMultiModuleWarning(entry));
