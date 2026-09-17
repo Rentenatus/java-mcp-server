@@ -51,6 +51,7 @@ import org.yaml.snakeyaml.Yaml;
 public class JavaMcpServer {
 
     private final ProjectManager projectManager = new ProjectManager();
+    private final com.softtek_jare.mcp.edit.EditManager editManager = new com.softtek_jare.mcp.edit.EditManager();
 
 /**
  * Entry point that loads logging configuration and starts the MCP server.
@@ -127,7 +128,8 @@ public class JavaMcpServer {
                 new ListMethodInvocationsTool(projectManager).build(),
                 new FindReferencesTool(projectManager).build(),
                 new CheckProjectDirtyTool(projectManager).build(),
-                new ReloadJavaProjectTool(projectManager).build()
+                new ReloadJavaProjectTool(projectManager).build(),
+                new EditLineTool(projectManager, editManager).build()
         );
 
         McpJsonMapper jsonMapper = new JacksonMcpJsonMapperSupplier().get();
