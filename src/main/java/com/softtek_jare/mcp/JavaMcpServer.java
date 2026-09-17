@@ -134,7 +134,10 @@ public class JavaMcpServer {
                 new ReplaceMethodBodyTool(projectManager, editManager).build(),
                 new AddMethodTool(projectManager, editManager).build(),
                 new AddFieldTool(projectManager, editManager).build(),
-                new RemoveMemberTool(projectManager, editManager).build()
+                new RemoveMemberTool(projectManager, editManager).build(),
+                new AddAnnotationTool(projectManager, editManager).build(),
+                new RemoveAnnotationTool(projectManager, editManager).build(),
+                new EditAnnotationTool(projectManager, editManager).build()
         );
 
         McpJsonMapper jsonMapper = new JacksonMcpJsonMapperSupplier().get();
