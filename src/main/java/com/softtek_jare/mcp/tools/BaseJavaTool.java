@@ -160,6 +160,61 @@ public abstract class BaseJavaTool implements McpTool {
     }
 
 /**
+ * Validates the optimistic lock for a file before writing.
+ * Implements the 4-condition check from the edit-tools concept Section 5.
+ *
+ * @param entry              the loaded project entry (in-memory fingerprints)
+ * @param file               the target file on disk
+ * @param expectedFingerprint optional fingerprint the caller believes the file has;
+ *                            null or blank means "not provided"
+ * @throws IllegalArgumentException if the file was changed externally or the
+ *                                  expected fingerprint does not match
+ */
+    protected static void validateFingerprint(ProjectEntry entry, java.nio.file.Path file, String expectedFingerprint) {
+        java.nio.file.Path normalized = file.normalize();
+        Fingerprint stored = entry.sourceFingerprints().get(normalized);
+        if (stored == null) return; // no fingerprint for this file — cannot check
+
+        // Condition 4: in-memory fingerprint must match disk (external change detection)
+        if (!Files.exists(file)) {
+            throw new IllegalArgumentException(
+                    "File '" + file.getFileName() + "' has been deleted since project load. "
+                    + "Reload the project before editing.");
+        }
+        Fingerprint onDisk;
+        try {
+            onDisk = new Fingerprint(
+                    Files.getLastModifiedTime(file).toMillis(),
+                    Files.size(file));
+        } catch (java.io.IOException e) {
+            throw new IllegalArgumentException("Cannot read file '" + file + "': " + e.getMessage());
+        }
+        if (!stored.equals(onDisk)) {
+            throw new IllegalArgumentException(
+                    "File '" + file.getFileName() + "' has been modified since project load (fingerprint mismatch). "
+                    + "Another session or external process changed this file. Reload the project before editing.");
+        }
+
+        // Conditions 1 & 3: if expectedFingerprint provided, it must match in-memory
+        if (expectedFingerprint != null && !expectedFingerprint.isBlank()) {
+            String storedStr = fingerprintToString(stored);
+            if (!expectedFingerprint.equals(storedStr)) {
+                throw new IllegalArgumentException(
+                        "File '" + file.getFileName() + "' has been modified since the caller's last observation "
+                        + "(expected fingerprint mismatch). Reload the project before editing.");
+            }
+        }
+        // Condition 2: expectedFingerprint not provided, disk matches in-memory — proceed
+    }
+
+/**
+ * Serializes a fingerprint to a string for use as expectedFingerprint parameter.
+ */
+    protected static String fingerprintToString(Fingerprint fp) {
+        return fp.lastModified() + "|" + fp.fileSize();
+    }
+
+/**
  * Formats an expiry warning for newly expired projects.
  */
     protected static String formatExpiredWarning(List<String> expiredNames) {
