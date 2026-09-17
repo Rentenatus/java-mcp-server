@@ -95,7 +95,11 @@ public class LoadJavaProjectTool implements McpTool {
                                 "delombok", Map.of("type", "boolean",
                                         "description", "If true (default) and Lombok is detected, "
                                                 + "automatically run delombok to expose Lombok-generated "
-                                                + "members in the AST. Set false to load the raw source as-is.")
+                                                + "members in the AST. Set false to load the raw source as-is."),
+                                "editable", Map.of("type", "boolean",
+                                        "description", "If true (default for local/git/archive), edit tools "
+                                                + "are available. JAR sources are always false. Set false "
+                                                + "to load in paranoia mode (read-only even on writable filesystem).")
                         ),
                         "required", List.of("source")
                 ))
@@ -107,6 +111,7 @@ public class LoadJavaProjectTool implements McpTool {
             String expiryDateStr = arg(request, "expiryDate");
             Boolean delombokArg = boolArg(request, "delombok");
             boolean autoDelombok = delombokArg == null || delombokArg;
+            Boolean editableArg = boolArg(request, "editable");
 
             Instant expiryDate = null;
             if (expiryDateStr != null && !expiryDateStr.isBlank()) {
@@ -118,9 +123,10 @@ public class LoadJavaProjectTool implements McpTool {
                 }
             }
 
-            LOG.info("Loading Java project: {} (alias={}, delombok={})", source, alias, autoDelombok);
+            LOG.info("Loading Java project: {} (alias={}, delombok={}, editable={})",
+                    source, alias, autoDelombok, editableArg);
             try {
-                var entry = manager.load(source, alias, expiryDate, autoDelombok);
+                var entry = manager.load(source, alias, expiryDate, autoDelombok, editableArg);
                 ObjectNode json = MAPPER.createObjectNode();
                 json.put("error", false);
                 json.put("message", "Java project loaded successfully");
@@ -129,6 +135,7 @@ public class LoadJavaProjectTool implements McpTool {
                 json.put("types", entry.model().getAllTypes().size());
                 json.put("build", entry.buildType());
                 json.put("delomboked", entry.delomboked());
+                json.put("editable", entry.editable());
                 if (entry.lombokVersion() != null) {
                     json.put("lombokVersion", entry.lombokVersion());
                 }

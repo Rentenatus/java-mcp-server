@@ -66,13 +66,22 @@ public class ProjectManager {
  * Loads a Java project with automatic delombok enabled.
  */
     public ProjectEntry load(String source, String alias, Instant expiryDate) throws ProjectLoadException {
-        return load(source, alias, expiryDate, true);
+        return load(source, alias, expiryDate, true, null);
     }
 
 /**
  * Loads a Java project, optionally running delombok if Lombok is detected.
  */
     public ProjectEntry load(String source, String alias, Instant expiryDate, boolean autoDelombok)
+            throws ProjectLoadException {
+        return load(source, alias, expiryDate, autoDelombok, null);
+    }
+
+/**
+ * Loads a Java project with explicit editable flag and optional delombok.
+ * JAR sources are hard-locked to editable=false regardless of the requested value.
+ */
+    public ProjectEntry load(String source, String alias, Instant expiryDate, boolean autoDelombok, Boolean editableOverride)
             throws ProjectLoadException {
         markExpired();
 
@@ -123,10 +132,14 @@ public class ProjectManager {
             Launcher launcher = createLauncher(sourceToAnalyze, buildInfo);
             CtModel model = launcher.buildModel();
 
+            // Determine editable: JAR sources are hard-locked to false
+            boolean isJar = source != null && source.toLowerCase().endsWith(".jar");
+            boolean editable = isJar ? false : (editableOverride != null ? editableOverride : true);
+
             ProjectEntry entry = new ProjectEntry(name, alias, expiryDate,
                     sourceToAnalyze, launcher, model, buildInfo.type().name(),
                     delomboked, lombokVersion,
-                    projectDir, source, buildFingerprints(projectDir), false, true);
+                    projectDir, source, buildFingerprints(projectDir), false, editable);
             entries.put(name, entry);
             LOG.info("Project '{}' loaded successfully ({} types, delomboked={})",
                     name, model.getAllTypes().size(), delomboked);
@@ -161,7 +174,7 @@ public class ProjectManager {
             throw new ProjectLoadException("NOT_FOUND",
                 "No project found with name or alias '" + nameOrAlias + "'. Call load_java_project first.");
         }
-        return load(old.originalSource(), old.alias(), null, old.delomboked());
+        return load(old.originalSource(), old.alias(), null, old.delomboked(), old.editable());
     }
 
 /**
