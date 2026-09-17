@@ -35,7 +35,17 @@ import com.softtek.mcp.model.ProjectEntry;
 
 import java.util.Map;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Objects;
+import java.nio.file.Files;
+import com.softtek.mcp.model.Fingerprint;
+import spoon.reflect.declaration.CtType;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Objects;
+import java.nio.file.Files;
+import com.softtek.mcp.model.Fingerprint;
+import spoon.reflect.declaration.CtType;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -242,5 +252,98 @@ public abstract class BaseJavaTool implements McpTool {
  */
     protected static List<String> req(String... keys) {
         return List.of(keys);
+    }
+
+/**
+ * Result of a dirty check: how many files were checked and which changed.
+ */
+    protected record DirtyCheckResult(int filesChecked, List<String> changedFiles, List<String> deletedFiles, List<String> newFiles) {
+        boolean isDirty() { return !changedFiles.isEmpty() || !deletedFiles.isEmpty() || !newFiles.isEmpty(); }
+    }
+
+/**
+ * Scoped dirty check: compares fingerprints only for the source files of the given types.
+ */
+    protected static DirtyCheckResult checkDirty(ProjectEntry entry, List<CtType<?>> typesToCheck) {
+        List<String> changed = new ArrayList<>();
+        List<java.nio.file.Path> sourceFiles = typesToCheck.stream()
+            .map(t -> t.getPosition().getFile() != null ? t.getPosition().getFile().toPath() : null)
+            .filter(Objects::nonNull)
+            .distinct()
+            .toList();
+
+        for (java.nio.file.Path file : sourceFiles) {
+            Fingerprint stored = entry.sourceFingerprints().get(file);
+            if (stored == null) continue;
+            if (!Files.exists(file)) { changed.add(file + " (deleted)"); continue; }
+            try {
+                Fingerprint current = new Fingerprint(
+                    Files.getLastModifiedTime(file).toMillis(),
+                    Files.size(file));
+                if (!current.equals(stored)) changed.add(file.toString());
+            } catch (java.io.IOException e) {
+                changed.add(file + " (read error)");
+            }
+        }
+        return new DirtyCheckResult(sourceFiles.size(), changed, List.of(), List.of());
+    }
+
+/**
+ * Full-scan dirty check: walks the entire source root, detecting changed, deleted, and new files.
+ */
+    protected static DirtyCheckResult checkDirtyFullScan(ProjectEntry entry) {
+        List<String> changed = new ArrayList<>();
+        List<String> deleted = new ArrayList<>();
+        List<String> newFiles = new ArrayList<>();
+        java.nio.file.Path root = entry.originalProjectDir();
+        if (root == null || !Files.isDirectory(root)) {
+            return new DirtyCheckResult(0, changed, deleted, newFiles);
+        }
+        java.util.Set<java.nio.file.Path> onDisk = new java.util.HashSet<>();
+        try (var stream = Files.walk(root)) {
+            stream.filter(Files::isRegularFile)
+                  .filter(p -> p.toString().endsWith(".java"))
+                  .forEach(p -> {
+                      java.nio.file.Path norm = p.normalize();
+                      onDisk.add(norm);
+                      Fingerprint stored = entry.sourceFingerprints().get(norm);
+                      if (stored == null) { newFiles.add(norm.toString()); return; }
+                      try {
+                          Fingerprint current = new Fingerprint(
+                              Files.getLastModifiedTime(norm).toMillis(),
+                              Files.size(norm));
+                          if (!current.equals(stored)) changed.add(norm.toString());
+                      } catch (java.io.IOException e) {
+                          changed.add(norm + " (read error)");
+                      }
+                  });
+        } catch (java.io.IOException e) {
+            // walk failed — return empty
+        }
+        for (java.nio.file.Path stored : entry.sourceFingerprints().keySet()) {
+            if (!onDisk.contains(stored)) deleted.add(stored.toString());
+        }
+        return new DirtyCheckResult(onDisk.size(), changed, deleted, newFiles);
+    }
+
+/**
+ * Formats a scoped dirty warning (no clean confirmation — token efficiency).
+ */
+    protected static String formatDirtyWarning(DirtyCheckResult dirty) {
+        if (!dirty.isDirty()) return "";
+        StringBuilder sb = new StringBuilder();
+        int total = dirty.changedFiles().size() + dirty.deletedFiles().size() + dirty.newFiles().size();
+        sb.append("> ⚠️ ").append(total).append(" source file(s) changed since load:\n");
+        List<String> all = new ArrayList<>();
+        all.addAll(dirty.changedFiles());
+        all.addAll(dirty.deletedFiles());
+        all.addAll(dirty.newFiles());
+        int cap = Math.min(all.size(), 10);
+        for (int i = 0; i < cap; i++) {
+            sb.append("> ").append(all.get(i)).append("\n");
+        }
+        if (all.size() > 10) sb.append("> …and ").append(all.size() - 10).append(" more\n");
+        sb.append("> Call `reload_java_project` to refresh the model.\n\n");
+        return sb.toString();
     }
 }
