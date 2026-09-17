@@ -61,9 +61,10 @@ public class RenameSymbolTool extends BaseJavaTool {
 
     @Override protected String toolName() { return "rename_symbol"; }
     @Override protected String toolDescription() {
-        return "Rename a class, method, or field across every caller. Backed by type-resolved "
-                + "find_references. Returns unresolved_references for string literals matching "
-                + "the old name (reflection boundary).";
+        return "Rename a class, method, or field. By default updates every caller (global). "
+                + "Set updateCallers=false to rename only the declaration without touching call sites "
+                + "(useful for interface methods, refactoring steps, or when callers will be regenerated). "
+                + "Returns unresolved_references for string literals matching the old name (reflection boundary).";
     }
     @Override protected Map<String, Object> toolProperties() {
         return Map.of(
@@ -71,7 +72,8 @@ public class RenameSymbolTool extends BaseJavaTool {
             "className", Map.of("type", "string", "description", "Fully qualified class name of the target"),
             "oldName", Map.of("type", "string", "description", "Current name of the symbol"),
             "newName", Map.of("type", "string", "description", "New name for the symbol"),
-            "scope", Map.of("type", "string", "description", "Optional: 'method', 'field', or 'class' (default: method)")
+            "scope", Map.of("type", "string", "description", "Optional: 'method', 'field', or 'class' (default: method)"),
+            "updateCallers", Map.of("type", "boolean", "description", "If true (default), update all call sites. If false, rename only the declaration.")
         );
     }
     @Override protected List<String> toolRequired() { return req("name", "className", "oldName", "newName"); }
@@ -84,6 +86,10 @@ public class RenameSymbolTool extends BaseJavaTool {
         String newName = arg(request, "newName");
         String scope = arg(request, "scope");
         if (scope == null) scope = "method";
+        boolean updateCallers = boolArg(request, "updateCallers");
+        // default: true (global rename) — only false if explicitly set
+        Object raw = request.arguments().get("updateCallers");
+        if (raw == null) updateCallers = true;
 
         ProjectEntry entry = findEntry(name);
         requireEditable(entry);
@@ -98,11 +104,11 @@ public class RenameSymbolTool extends BaseJavaTool {
         List<Path> affectedFiles = new ArrayList<>();
 
         if ("method".equals(scope)) {
-            callersUpdated = renameMethod(entry, targetType, oldName, newName, affectedFiles);
+            callersUpdated = renameMethod(entry, targetType, oldName, newName, affectedFiles, updateCallers);
         } else if ("field".equals(scope)) {
-            callersUpdated = renameField(entry, targetType, oldName, newName, affectedFiles);
+            callersUpdated = renameField(entry, targetType, oldName, newName, affectedFiles, updateCallers);
         } else if ("class".equals(scope)) {
-            callersUpdated = renameClass(entry, targetType, oldName, newName, affectedFiles);
+            callersUpdated = renameClass(entry, targetType, oldName, newName, affectedFiles, updateCallers);
         } else {
             return error("scope must be 'method', 'field', or 'class'");
         }
@@ -140,6 +146,9 @@ public class RenameSymbolTool extends BaseJavaTool {
         sb.append("Renamed: ").append(oldName).append(" -> ").append(newName).append("\n");
         sb.append("Callers updated: ").append(callersUpdated).append("\n");
         sb.append("Files changed: ").append(affectedFiles.size()).append("\n");
+        if (!updateCallers) {
+            sb.append("Mode: declaration only (updateCallers=false). Call sites were NOT modified.\n");
+        }
         if (!unresolved.isEmpty()) {
             sb.append("Unresolved references (string literals):\n");
             for (UnresolvedRef ref : unresolved) {
@@ -152,7 +161,7 @@ public class RenameSymbolTool extends BaseJavaTool {
     }
 
     private int renameMethod(ProjectEntry entry, CtType<?> targetType, String oldName,
-                             String newName, List<Path> affectedFiles) {
+                             String newName, List<Path> affectedFiles, boolean updateCallers) {
         // Rename the declaration
         int count = 0;
         for (CtMethod<?> method : targetType.getMethods()) {
@@ -167,7 +176,8 @@ public class RenameSymbolTool extends BaseJavaTool {
             }
         }
 
-        // Rename all invocations across all loaded types
+        // Rename all invocations across all loaded types (only if updateCallers)
+        if (!updateCallers) return count;
         for (CtType<?> type : entry.model().getAllTypes()) {
             for (CtMethod<?> method : type.getMethods()) {
                 if (method.getBody() == null) continue;
@@ -193,7 +203,7 @@ public class RenameSymbolTool extends BaseJavaTool {
     }
 
     private int renameField(ProjectEntry entry, CtType<?> targetType, String oldName,
-                            String newName, List<Path> affectedFiles) {
+                            String newName, List<Path> affectedFiles, boolean updateCallers) {
         int count = 0;
         // Rename the declaration
         for (var field : targetType.getFields()) {
@@ -207,7 +217,8 @@ public class RenameSymbolTool extends BaseJavaTool {
                 count++;
             }
         }
-        // Rename all field accesses
+        // Rename all field accesses (only if updateCallers)
+        if (!updateCallers) return count;
         for (CtType<?> type : entry.model().getAllTypes()) {
             for (CtMethod<?> method : type.getMethods()) {
                 if (method.getBody() == null) continue;
@@ -233,13 +244,14 @@ public class RenameSymbolTool extends BaseJavaTool {
     }
 
     private int renameClass(ProjectEntry entry, CtType<?> targetType, String oldName,
-                            String newName, List<Path> affectedFiles) {
+                            String newName, List<Path> affectedFiles, boolean updateCallers) {
         targetType.setSimpleName(newName);
         Path file = targetType.getPosition().getFile() != null
                 ? targetType.getPosition().getFile().toPath() : null;
         if (file != null) affectedFiles.add(file);
 
         int count = 1;
+        if (!updateCallers) return count;
         // Update all type references
         for (CtType<?> type : entry.model().getAllTypes()) {
             var refs = type.getElements(new TypeFilter<>(spoon.reflect.reference.CtTypeReference.class));
