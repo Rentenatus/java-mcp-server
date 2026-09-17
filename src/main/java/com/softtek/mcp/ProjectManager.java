@@ -33,6 +33,8 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Collection;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
@@ -69,7 +71,7 @@ public class ProjectManager {
  */
     public ProjectEntry load(String source, String alias, Instant expiryDate, boolean autoDelombok)
             throws ProjectLoadException {
-        removeExpired();
+        markExpired();
 
         if (expiryDate == null) {
             expiryDate = Instant.now().plus(10, ChronoUnit.MINUTES);
@@ -139,7 +141,7 @@ public class ProjectManager {
  * Finds a loaded project by name or alias.
  */
     public ProjectEntry find(String nameOrAlias) {
-        removeExpired();
+        markExpired();
         for (ProjectEntry entry : entries.values()) {
             if (entry.alias() != null && entry.alias().equals(nameOrAlias)) {
                 return entry;
@@ -167,26 +169,30 @@ public class ProjectManager {
  * Returns all currently loaded projects.
  */
     public Collection<ProjectEntry> list() {
-        removeExpired();
+        markExpired();
         return entries.values();
     }
 
 /**
- * Removes all projects whose expiry date has passed.
+ * Marks all projects whose expiry date has passed as expired (without deleting them).
+ * Returns the names of newly expired projects for agent notification.
  */
-    private void removeExpired() {
+    private List<String> markExpired() {
         Instant now = Instant.now();
-        entries.values().removeIf(entry -> {
-            if (entry.expiryDate() != null && now.isAfter(entry.expiryDate())) {
-                LOG.info("Removing expired project '{}' (expired at {})", entry.name(), entry.expiryDate());
-                projectLoader.cleanup(entry.projectDir());
-                if (entry.delomboked()) {
-                    lombokDelomboker.cleanup(entry.projectDir());
-                }
-                return true;
+        List<String> newlyExpired = new ArrayList<>();
+        for (var entry : entries.values()) {
+            if (!entry.expired() && entry.expiryDate() != null && now.isAfter(entry.expiryDate())) {
+                entries.put(entry.name(), new ProjectEntry(
+                    entry.name(), entry.alias(), entry.expiryDate(),
+                    entry.projectDir(), entry.launcher(), entry.model(),
+                    entry.buildType(), entry.delomboked(), entry.lombokVersion(),
+                    entry.originalProjectDir(), entry.originalSource(),
+                    entry.sourceFingerprints(), true));
+                LOG.info("Project '{}' expired at {}", entry.name(), entry.expiryDate());
+                newlyExpired.add(entry.name());
             }
-            return false;
-        });
+        }
+        return newlyExpired;
     }
 
 /**
