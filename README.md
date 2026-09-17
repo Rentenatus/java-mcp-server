@@ -1,5 +1,7 @@
 # java-mcp-server
 
+**Version 1.0.6** — MIT License, Copyright (c) 2026 Janusch Rentenatus
+
 A deterministic Java code analysis server that implements the [Model Context Protocol (MCP)](https://modelcontextprotocol.io) to give AI agents precise, structured access to Java source code.
 
 ## Why
@@ -26,22 +28,28 @@ This project is directly inspired by [cobol-mcp-server](https://github.com/aferr
 - **Cross-reference**: find implementations, usages, annotated elements, method invocations, callers
 - **Validate** code references (check if a type/method/field actually exists)
 - **Multi-project**: load and query several projects simultaneously
+- **Fingerprint-based dirty detection**: detects changed, deleted, and new source files since load
+- **Expiry management**: expired projects stay in memory (marked, not deleted) and can be bulk-reloaded
+- **Javadoc support**: `inspect_class`, `inspect_method`, `inspect_field`, and `list_methods` include Javadoc via `withJavadoc=true` (default)
+- **Server version**: displayed at startup and in the `check_project_dirty` status output
 
-### Available tools
+### Available tools (29)
 
 | Tool | Description |
 |---|---|
 | `load_java_project` | Load a Java project from a path, Git URL, or archive. Supports optional `delombok` (default true) to expose Lombok-generated members in the AST. |
-| `list_loaded_projects` | List all currently loaded projects |
 | `unload_java_project` | Unload a project and free resources |
+| `reload_java_project` | Reload a project from its original source. Supports `expired=true` to bulk-reload all expired projects. |
+| `list_loaded_projects` | List all currently loaded projects (expired projects marked with `[EXPIRED]`) |
+| `check_project_dirty` | Full-scan status tool: compares all `.java` files on disk against stored fingerprints. Detects changed, deleted, and new files. Shows MCP server version. |
 | `project_metadata` | Get metadata (name, build type, type count) |
 | `inspect_build_config` | Show detected build configuration |
 | `list_packages` | List all packages in the project |
 | `list_classes` | List all classes, optionally filtered by package |
-| `list_methods` | List all methods in a class or project-wide |
-| `inspect_class` | Deep-dive into a class: fields, methods, superclass, interfaces, annotations. For Lombok projects loaded with `delombok=false`, appends a `Lombok-predicted members` section listing what Lombok would generate. |
-| `inspect_method` | Deep-dive into a method: signature, parameters, return type, body |
-| `inspect_field` | Deep-dive into a field: type, modifiers, annotations, initializer |
+| `list_methods` | List all methods in a class or project-wide. With `withJavadoc=true` (default), includes a one-line Javadoc summary per method. |
+| `inspect_class` | Deep-dive into a class: fields, methods, superclass, interfaces, annotations. Includes class-level Javadoc with `withJavadoc=true` (default). For Lombok projects loaded with `delombok=false`, appends a `Lombok-predicted members` section. |
+| `inspect_method` | Deep-dive into a method: signature, parameters, return type, body. Includes full method Javadoc with `withJavadoc=true` (default). |
+| `inspect_field` | Deep-dive into a field: type, modifiers, annotations, initializer. Includes field Javadoc with `withJavadoc=true` (default). |
 | `list_constructors` | List all constructors in a class with parameters and bodies |
 | `list_annotations` | List all annotations used in the project or on a specific type |
 | `find_annotated_elements` | Find all types/methods/fields annotated with a given annotation |
@@ -84,6 +92,33 @@ The server communicates over **stdin/stdout** using the MCP transport protocol, 
 Logs are written to `/tmp/java_mcp_server.log` by default (configurable in `src/main/resources/application.yaml`).
 
 ## Configuration for AI agents
+
+### Mistral Vibe (TOML)
+
+Add to `~/.vibe/config.toml`:
+
+```toml
+[[mcp_servers]]
+name = "my-mcp-server"
+transport = "stdio"
+command = "java"
+args = ["-jar", "/path/to/java-mcp-server-standalone.jar"]
+```
+
+Or add non-interactively from the shell:
+
+```bash
+vibe mcp add my-mcp-server \
+  --transport stdio \
+  --command java \
+  --args '["-jar", "/path/to/java-mcp-server-standalone.jar"]'
+```
+
+Or from inside Vibe:
+
+```
+/mcp add my-mcp-server
+```
 
 ### Claude Desktop / Claude Code
 
@@ -147,11 +182,28 @@ The server will listen on stdin for JSON-RPC messages and respond on stdout.
 
 1. The server loads a Java project using Spoon, optionally leveraging Maven/Gradle metadata for full classpath resolution.
 2. If Lombok is detected and `delombok=true` (default), the project is first run through `delombok` so that Lombok-generated members (`getX()`, `setX()`, `equals()`, etc.) become real AST nodes. If `delombok=false`, those members are absent from the model but `inspect_class` lists them under a `Lombok-predicted members` section as a safety net.
-3. Spoon builds a full AST (CtModel) with resolved types and references.
+3. Spoon builds a full AST (CtModel) with resolved types and references. Comment parsing is enabled, so Javadoc is available via `getDocComment()`.
 4. Each MCP tool maps to a precise query against that model — no guessing, no hallucination.
-5. Results are returned as structured JSON that the agent can safely reason about.
+5. Results are returned as structured text that the agent can safely reason about.
 
-Projects auto-expire after 10 minutes by default. Use the `expiryDate` parameter when loading to override.
+### Expiry and dirty detection
+
+- Projects auto-expire after 10 minutes by default (configurable via `expiryDate` when loading).
+- Expired projects are **marked**, not deleted — they stay in memory so the agent can reload them using `reload_java_project` with `expired=true`.
+- Every tool response includes an expiry warning when projects have expired, listing the affected project names.
+- `check_project_dirty` performs a full filesystem scan, comparing file timestamps and sizes against stored fingerprints. It detects **changed**, **deleted**, and **new** files.
+- `inspect_class`, `inspect_method`, `inspect_field`, and `list_methods` perform scoped dirty checks on the specific source files they query. They warn only when dirty (no clean confirmation — token efficiency).
+
+### Javadoc support
+
+Four tools accept a `withJavadoc` parameter (default `true`):
+
+| Tool | What it shows |
+|------|---------------|
+| `inspect_class` | Full class-level Javadoc in a code block |
+| `inspect_method` | Full method Javadoc (including `@author`) in a code block |
+| `inspect_field` | Full field Javadoc in a code block |
+| `list_methods` | First non-empty summary line per method (skips `*` and `@` lines) |
 
 ## Lombok support
 
