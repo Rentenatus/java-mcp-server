@@ -124,7 +124,8 @@ public class JavaMcpServer {
                 new GetAnnotationDetailsTool(projectManager).build(),
                 new ListMethodsByReturnTypeTool(projectManager).build(),
                 new ListMethodInvocationsTool(projectManager).build(),
-                new FindReferencesTool(projectManager).build()
+                new FindReferencesTool(projectManager).build(),
+                new CheckProjectDirtyTool(projectManager).build()
         );
 
         McpJsonMapper jsonMapper = new JacksonMcpJsonMapperSupplier().get();
