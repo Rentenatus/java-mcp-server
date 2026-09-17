@@ -152,6 +152,31 @@ public class ProjectManager {
     }
 
 /**
+ * Reloads a single project from its stored original source.
+ */
+    public ProjectEntry reload(String nameOrAlias) throws ProjectLoadException {
+        ProjectEntry old = find(nameOrAlias);
+        if (old == null) {
+            throw new ProjectLoadException("NOT_FOUND",
+                "No project found with name or alias '" + nameOrAlias + "'. Call load_java_project first.");
+        }
+        return load(old.originalSource(), old.alias(), null, old.delomboked());
+    }
+
+/**
+ * Reloads all expired projects from their stored original sources.
+ */
+    public List<ProjectEntry> reloadExpired() throws ProjectLoadException {
+        List<ProjectEntry> reloaded = new ArrayList<>();
+        for (var entry : new ArrayList<>(entries.values())) {
+            if (entry.expired()) {
+                reloaded.add(load(entry.originalSource(), entry.alias(), null, entry.delomboked()));
+            }
+        }
+        return reloaded;
+    }
+
+/**
  * Removes and cleans up a loaded project.
  */
     public ProjectEntry remove(String nameOrAlias) {
