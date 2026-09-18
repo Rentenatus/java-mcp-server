@@ -113,6 +113,55 @@ class StructuralToolsTest {
     }
 
     @Test
+    void rewriteSignatureGenericReturnType() throws Exception {
+        Path file = srcDir.resolve("G.java");
+        Files.writeString(file, """
+            import java.util.List;
+            class G {
+                List<String> getItems() {
+                    return null;
+                }
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+        RewriteSignatureTool tool = new RewriteSignatureTool(mgr, editMgr);
+
+        CallToolResult result = tool.handle(null, req(entry.name(), "G", "getItems",
+                "List<String>", null, null));
+
+        assertFalse(result.isError());
+        String written = Files.readString(file);
+        assertTrue(written.contains("List<String> getItems()"));
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void rewriteSignatureDoesNotMatchInComment() throws Exception {
+        Path file = srcDir.resolve("C.java");
+        Files.writeString(file, """
+            class C {
+                // int compute(int x) — old signature
+                long compute(int x) {
+                    return x;
+                }
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+        RewriteSignatureTool tool = new RewriteSignatureTool(mgr, editMgr);
+
+        CallToolResult result = tool.handle(null, req(entry.name(), "C", "compute",
+                "long", "int x, int y", null));
+
+        assertFalse(result.isError());
+        String written = Files.readString(file);
+        // The comment must still contain the old signature.
+        assertTrue(written.contains("// int compute(int x)"));
+        // The actual declaration must have the new params.
+        assertTrue(written.contains("long compute(int x, int y)"));
+        mgr.remove(entry.name());
+    }
+
+    @Test
     void addPackageCreatesDirectory() throws Exception {
         Files.writeString(srcDir.resolve("X.java"), "class X {}");
         ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);

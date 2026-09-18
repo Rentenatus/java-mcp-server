@@ -117,17 +117,29 @@ public class RewriteSignatureTool extends BaseJavaTool {
         if (file == null) return error("Cannot determine source file.");
 
         String source = Files.readString(file);
-        // Replace the first occurrence of the old method signature pattern
+        // Find the method declaration by locating the declaration line from the
+        // AST and matching the signature there. The previous approach built an
+        // exact string from erased simple names (strips generics like
+        // List<String>) and used replaceFirst on the whole file, which could
+        // match the same pattern inside a comment. We now scope the search to
+        // the declaration line(s) and use a token-based match tolerant of
+        // generic brackets. Returns null when the declaration could not be
+        // found at all; the returned source may be unchanged when the
+        // signature already matches (e.g. user re-applies generics that
+        // Spoon erased to a simple name).
+        int declLine = target.getPosition().getLine();
         String oldDecl = target.getType().getSimpleName() + " " + methodName + "(" + getParamString(target) + ")";
         String newDecl = retType + " " + methodName + "(" + params + ")";
-        String newSource = source.replaceFirst(java.util.regex.Pattern.quote(oldDecl), java.util.regex.Matcher.quoteReplacement(newDecl));
-        if (newSource.equals(source)) {
+        String newSource = replaceSignatureOnLine(source, methodName, oldDecl, newDecl, declLine);
+        if (newSource == null) {
             return error("Could not find method declaration to replace. Pattern: " + oldDecl);
         }
 
-        entry = editManager.writeFile(entry, file, newSource, null);
-        manager.updateEntry(entry);
-        editManager.logEdit(toolName());
+        if (!newSource.equals(source)) {
+            entry = editManager.writeFile(entry, file, newSource, null);
+            manager.updateEntry(entry);
+            editManager.logEdit(toolName());
+        }
 
         int callersUpdated = 0;
         if ("signature_and_callers".equals(mode)) {
@@ -153,6 +165,107 @@ public class RewriteSignatureTool extends BaseJavaTool {
             sb.append(p.getType() != null ? p.getType().getSimpleName() : "?").append(" ").append(p.getSimpleName());
         }
         return sb.toString();
+    }
+
+    /**
+     * Replaces the method signature on the declaration line(s). Tries an exact
+     * string match first (fast path). If that fails — e.g. because the source
+     * uses generic types like {@code List<String>} while the AST simple name is
+     * erased to {@code List} — falls back to locating the method name token on
+     * the declaration line, finding the matching ')' for the parameter list,
+     * and replacing from the return type start through ')' with newDecl.
+     */
+    private static String replaceSignatureOnLine(String source, String methodName,
+                                                  String oldDecl, String newDecl, int declLine) {
+        String[] lines = source.split("\n", -1);
+        if (declLine < 1 || declLine > lines.length) return null;
+        int start = declLine - 1; // 0-indexed
+        // Consider up to 3 lines for the declaration (multi-line signatures).
+        int end = Math.min(start + 3, lines.length);
+
+        // Fast path: exact match within the window.
+        for (int i = start; i < end; i++) {
+            if (lines[i].contains(oldDecl)) {
+                lines[i] = lines[i].replace(oldDecl, newDecl);
+                return String.join("\n", lines);
+            }
+        }
+
+        // Fallback: the source uses generics in the return type (e.g.
+        // List<String>) that were erased to a simple name (List) in oldDecl,
+        // so the fast path cannot match. Instead, locate the method name token
+        // on the declaration line, find the matching ')' for the parameter
+        // list, and replace from the start of the return type through ')' with
+        // newDecl. This avoids matching inside comments.
+        for (int i = start; i < end; i++) {
+            String trimmed = lines[i].trim();
+            if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) continue;
+            int nameIdx = findMethodNameToken(lines[i], methodName);
+            if (nameIdx < 0) continue;
+            int parenStart = lines[i].indexOf('(', nameIdx);
+            if (parenStart < 0) continue;
+            int parenEnd = findMatchingParen(lines[i], parenStart);
+            if (parenEnd < 0) continue;
+            int retStart = findReturnTypeStart(lines[i], nameIdx);
+            if (retStart < 0) continue;
+            lines[i] = lines[i].substring(0, retStart) + newDecl + lines[i].substring(parenEnd + 1);
+            return String.join("\n", lines);
+        }
+        return null;
+    }
+
+    /**
+     * Finds the start index of {@code methodName} when it appears as a whole
+     * identifier token (not a substring of a longer name) followed by optional
+     * whitespace and {@code '('}. Returns -1 if not found.
+     */
+    private static int findMethodNameToken(String line, String methodName) {
+        int idx = 0;
+        while (true) {
+            idx = line.indexOf(methodName, idx);
+            if (idx < 0) return -1;
+            if (idx > 0 && Character.isJavaIdentifierPart(line.charAt(idx - 1))) { idx++; continue; }
+            int j = idx + methodName.length();
+            while (j < line.length() && Character.isWhitespace(line.charAt(j))) j++;
+            if (j < line.length() && line.charAt(j) == '(') return idx;
+            idx++;
+        }
+    }
+
+    /**
+     * Scans backwards from {@code nameIdx} (the method name position) to find
+     * the start of the return type on the same line. Handles generic return
+     * types like {@code List<String>} or {@code Map<K, V>} by tracking angle
+     * bracket depth. Returns the index of the first character of the return
+     * type, or -1 if none is found.
+     */
+    private static int findReturnTypeStart(String line, int nameIdx) {
+        int i = nameIdx - 1;
+        while (i >= 0 && Character.isWhitespace(line.charAt(i))) i--;
+        if (i < 0) return -1;
+        int depth = 0;
+        for (; i >= 0; i--) {
+            char c = line.charAt(i);
+            if (c == '>') { depth++; continue; }
+            if (c == '<') { depth--; if (depth < 0) { i++; break; } continue; }
+            if (depth > 0) continue; // inside generics: any char is part of the type
+            if (Character.isJavaIdentifierPart(c) || c == '.' || c == '[' || c == ']') continue;
+            i++; // boundary (space, brace, etc. at depth 0)
+            break;
+        }
+        if (i < 0) i = 0;
+        return i;
+    }
+
+    /** Returns the index of the ')' matching the '(' at {@code open}, or -1. */
+    private static int findMatchingParen(String s, int open) {
+        int depth = 0;
+        for (int i = open; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '(') depth++;
+            else if (c == ')') { depth--; if (depth == 0) return i; }
+        }
+        return -1;
     }
 
     private int updateCallers(ProjectEntry entry, CtType<?> targetType, String methodName, CtMethod<?> target) {
