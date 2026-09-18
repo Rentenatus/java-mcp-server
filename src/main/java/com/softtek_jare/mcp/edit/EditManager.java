@@ -194,12 +194,16 @@ public class EditManager {
         if (!inTransaction) return true;
         // Write all pending files to temp, then rename all
         List<Path> tempFiles = new ArrayList<>();
+        Map<Path, String> originalContents = new HashMap<>(); // null = new file
+        List<Path> renamedFiles = new ArrayList<>();
         try {
             for (var entry : pendingChanges.entrySet()) {
                 Path file = entry.getKey();
                 Path temp = file.resolveSibling(file.getFileName() + ".mcp-tmp");
                 // Preserve existing line ending
-                String existingContent = Files.exists(file) ? Files.readString(file) : "";
+                boolean isNew = !Files.exists(file);
+                originalContents.put(file, isNew ? null : Files.readString(file));
+                String existingContent = isNew ? "" : originalContents.get(file);
                 String lineEnding = LineEndings.detectLineEnding(existingContent);
                 String adaptedContent = LineEndings.preserveOnWrite(entry.getValue(), lineEnding);
                 Files.writeString(temp, adaptedContent);
@@ -210,10 +214,26 @@ public class EditManager {
                 Path file = entry.getKey();
                 Path temp = file.resolveSibling(file.getFileName() + ".mcp-tmp");
                 Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                renamedFiles.add(file);
             }
         } catch (IOException e) {
-            // Cleanup all temp files
-            for (Path temp : tempFiles) Files.deleteIfExists(temp);
+            // Restore already-renamed files to their original content
+            for (Path file : renamedFiles) {
+                String original = originalContents.get(file);
+                try {
+                    if (original != null) {
+                        Files.writeString(file, original);
+                    } else {
+                        Files.deleteIfExists(file); // was a new file — undo creation
+                    }
+                } catch (IOException restoreEx) {
+                    LOG.warn("Rollback failed for {}: {}", file, restoreEx.getMessage());
+                }
+            }
+            // Cleanup remaining temp files (those not yet renamed)
+            for (Path temp : tempFiles) {
+                try { Files.deleteIfExists(temp); } catch (IOException delEx) { /* best effort */ }
+            }
             // Transaction remains open
             return false;
         }
