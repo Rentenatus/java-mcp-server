@@ -225,6 +225,23 @@ public class RemoveMemberTool extends BaseJavaTool {
         if (startLine < 1) return source;
         String[] lines = source.split("\n", -1);
         int startIdx = startLine - 1;
+        String fieldName = field.getSimpleName();
+
+        // Multi-field declaration: "int x, y;" shares one line/endLine for both
+        // fields. A position-based line removal would delete the sibling too.
+        // When the declaration line contains a comma, remove only the named
+        // fragment from that line and keep the rest.
+        if (endLine <= startLine && lines[startIdx].contains(",")) {
+            lines[startIdx] = removeFieldFragmentFromLine(lines[startIdx], fieldName);
+            if (lines[startIdx].trim().isEmpty() || lines[startIdx].trim().equals(";")) {
+                // Whole line reduced to nothing meaningful — drop it.
+                return dropLines(lines, startIdx, startIdx + 1);
+            }
+            return String.join("\n", lines);
+        }
+
+        // Single-field declaration (possibly spanning multiple lines): remove
+        // the declaration lines plus any Javadoc/comment block above them.
 
         // Walk backwards to include Javadoc/comments above the field
         int commentStart = startIdx;
@@ -240,9 +257,32 @@ public class RemoveMemberTool extends BaseJavaTool {
         }
 
         int endIdx = Math.min(Math.max(endLine, startLine), lines.length);
+        return dropLines(lines, commentStart, endIdx);
+    }
+
+    /**
+     * Removes a single named declarator from a multi-field declaration line such
+     * as {@code "int x, y;"} or {@code "int x = 1, y = 2;"}, leaving the
+     * remainder syntactically valid. The modifier/type prefix and trailing
+     * semicolon are preserved. Only called when the line contains a comma.
+     */
+    private static String removeFieldFragmentFromLine(String line, String fieldName) {
+        String quoted = java.util.regex.Pattern.quote(fieldName);
+        // Non-first declarator: ", fieldName" or ", fieldName = init" (up to , or ;).
+        String nonFirst = ",\\s*" + quoted + "\\s*(=\\s*[^,;]+)?";
+        String updated = line.replaceAll(nonFirst, "");
+        if (!updated.equals(line)) return updated;
+        // First declarator: "fieldName, " or "fieldName = init, " — the type prefix
+        // before fieldName is preserved because only the declarator onward is removed.
+        String first = quoted + "\\s*(=\\s*[^,;]+)?\\s*,\\s*";
+        return line.replaceAll(first, "");
+    }
+
+    /** Returns the source with the lines [start, end) removed. */
+    private static String dropLines(String[] lines, int start, int end) {
         StringBuilder result = new StringBuilder();
         for (int i = 0; i < lines.length; i++) {
-            if (i >= commentStart && i < endIdx) continue; // skip field + comments
+            if (i >= start && i < end) continue;
             result.append(lines[i]);
             if (i < lines.length - 1) result.append("\n");
         }

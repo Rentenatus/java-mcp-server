@@ -118,6 +118,38 @@ class RemoveMemberToolTest {
         mgr.remove(entry.name());
     }
 
+    @Test
+    void hardModeRemovesOneOfMultiFieldDeclaration() throws Exception {
+        // "int x, y;" — removing x must not delete y.
+        Path file = srcDir.resolve("E.java");
+        Files.writeString(file, "class E {\n    int x, y;\n    int z;\n}\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = tool.handle(null, req(entry.name(), "E", "x", "field", "hard"));
+
+        assertFalse(result.isError());
+        String written = Files.readString(file);
+        assertFalse(written.contains("int x"));
+        assertTrue(written.contains("int y"));
+        assertTrue(written.contains("int z"));
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void hardModeRemovesInitializedFieldFromMultiDeclaration() throws Exception {
+        Path file = srcDir.resolve("F.java");
+        Files.writeString(file, "class F {\n    int a = 1, b = 2;\n}\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = tool.handle(null, req(entry.name(), "F", "b", "field", "hard"));
+
+        assertFalse(result.isError());
+        String written = Files.readString(file);
+        assertTrue(written.contains("int a = 1"));
+        assertFalse(written.contains("b = 2"));
+        mgr.remove(entry.name());
+    }
+
     private static CallToolRequest req(String name, String className, String memberName,
             String scope, String mode) {
         Map<String, Object> args = new HashMap<>();
