@@ -254,6 +254,12 @@ public class RenameSymbolTool extends BaseJavaTool {
 
     private int renameClass(ProjectEntry entry, CtType<?> targetType, String oldName,
                             String newName, List<Path> affectedFiles, boolean updateCallers) {
+        // Capture the old qualified name BEFORE mutating the AST.
+        // Calling setSimpleName first changes getQualifiedName(), so the
+        // subsequent reference comparison would compare old refs against the
+        // new qualified name and find zero matches.
+        String oldQualifiedName = targetType.getQualifiedName();
+
         targetType.setSimpleName(newName);
         Path file = targetType.getPosition().getFile() != null
                 ? targetType.getPosition().getFile().toPath() : null;
@@ -266,7 +272,7 @@ public class RenameSymbolTool extends BaseJavaTool {
             var refs = type.getElements(new TypeFilter<>(spoon.reflect.reference.CtTypeReference.class));
             for (var ref : refs) {
                 if (ref.getQualifiedName() != null
-                        && ref.getQualifiedName().equals(targetType.getQualifiedName())) {
+                        && ref.getQualifiedName().equals(oldQualifiedName)) {
                     ref.setSimpleName(newName);
                     Path f = type.getPosition().getFile() != null
                             ? type.getPosition().getFile().toPath() : null;
