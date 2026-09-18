@@ -137,7 +137,13 @@ public class AutoImportResolver {
             "\\b([A-Z][a-zA-Z0-9_]*)\\b");
         java.util.regex.Matcher m = p.matcher(bodyText);
         while (m.find()) {
-            names.add(m.group(1));
+            String name = m.group(1);
+            // Skip ALL_CAPS constants like MAX_VALUE, DEFAULT_TIMEOUT.
+            // These follow SCREAMING_SNAKE_CASE (uppercase + underscore)
+            // and are not type names. Single-word all-caps identifiers like
+            // URL or JSON are kept because they could be type names.
+            if (name.indexOf('_') >= 0 && name.equals(name.toUpperCase())) continue;
+            names.add(name);
         }
         return names;
     }
