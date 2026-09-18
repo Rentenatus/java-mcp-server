@@ -182,6 +182,31 @@ class RenameSymbolToolTest {
         mgr.remove(entry.name());
     }
 
+    @Test
+    void renameSkipsInlineAndTrailingComments() throws Exception {
+        Path file = srcDir.resolve("C.java");
+        Files.writeString(file, """
+            class C {
+                int compute() {
+                    int result = compute(); /* compute result */
+                    return result; // uses compute internally
+                }
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult r = tool.handle(null, mockRequest(
+                entry.name(), "C", "compute", "evaluate", "method"));
+
+        assertFalse(r.isError());
+        String written = Files.readString(file);
+        assertTrue(written.contains("evaluate()")); // call site renamed
+        // The word "compute" inside comments must remain untouched.
+        assertTrue(written.contains("/* compute result */"));
+        assertTrue(written.contains("// uses compute internally"));
+        mgr.remove(entry.name());
+    }
+
     private static CallToolRequest mockRequest(String name, String className,
             String oldName, String newName, String scope) {
         Map<String, Object> args = new HashMap<>();

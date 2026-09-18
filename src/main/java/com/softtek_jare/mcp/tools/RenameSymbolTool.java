@@ -378,11 +378,30 @@ public class RenameSymbolTool extends BaseJavaTool {
                     } else if (cc == '\'') break;
                 }
             } else {
-                // Code region — collect until next string/char and replace
+                // Code region — collect until next string, char, or comment marker
+                // and replace. Comment text must be copied verbatim so a name that
+                // happens to appear in a comment is not corrupted.
                 int start = i;
-                while (i < line.length() && line.charAt(i) != '"' && line.charAt(i) != '\'') i++;
+                while (i < line.length()) {
+                    char ch = line.charAt(i);
+                    if (ch == '"' || ch == '\'') break;
+                    if (ch == '/' && i + 1 < line.length() && line.charAt(i + 1) == '/') break;
+                    if (ch == '/' && i + 1 < line.length() && line.charAt(i + 1) == '*') break;
+                    i++;
+                }
                 String codeSegment = line.substring(start, i);
                 result.append(namePattern.matcher(codeSegment).replaceAll(newName));
+                // Copy any trailing comment verbatim.
+                if (i < line.length() && line.charAt(i) == '/' && i + 1 < line.length()
+                        && line.charAt(i + 1) == '/') {
+                    result.append(line.substring(i)); // rest of line is a comment
+                    i = line.length();
+                } else if (i < line.length() && line.charAt(i) == '/' && i + 1 < line.length()
+                        && line.charAt(i + 1) == '*') {
+                    int end = line.indexOf("*/", i + 2);
+                    if (end < 0) { result.append(line.substring(i)); i = line.length(); }
+                    else { result.append(line, i, end + 2); i = end + 2; }
+                }
             }
         }
         return result.toString();
