@@ -157,6 +157,29 @@ class ReplaceMethodBodyToolTest {
         mgr.remove(entry.name());
     }
 
+    @Test
+    void replaceBodyGenericParamSignature() throws Exception {
+        Path file = srcDir.resolve("Gen.java");
+        Files.writeString(file, """
+            import java.util.List;
+            class Gen {
+                void apply(List<String> items) {
+                    System.out.println(items);
+                }
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = tool.handle(null, mockRequest(
+                entry.name(), "Gen", "apply", "List<String>", "return;"));
+
+        assertFalse(result.isError());
+        String written = Files.readString(file);
+        assertTrue(written.contains("void apply(List<String> items)"));
+        assertTrue(written.contains("return;"));
+        mgr.remove(entry.name());
+    }
+
     private static CallToolRequest mockRequest(String name, String className,
             String methodName, String signature, String newBody) {
         Map<String, Object> args = new HashMap<>();

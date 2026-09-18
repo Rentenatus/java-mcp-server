@@ -160,21 +160,51 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
 
     private List<String> parseSignature(String sig) {
         List<String> params = new ArrayList<>();
-        for (String p : sig.split(",")) {
-            params.add(p.trim());
+        // Split on commas that are not inside generic angle brackets, so that
+        // "List<String>, int" yields ["List<String>", "int"] rather than the
+        // naive split producing ["List<String>", " int"] — actually naive split
+        // on "," already gives ["List<String>", " int"] which is fine, but
+        // "Map<K, V>, int" would wrongly split into three. Bracket-aware split
+        // keeps generic parameter lists together.
+        int depth = 0;
+        StringBuilder cur = new StringBuilder();
+        for (int i = 0; i < sig.length(); i++) {
+            char c = sig.charAt(i);
+            if (c == '<') depth++;
+            else if (c == '>') depth = Math.max(0, depth - 1);
+            if (c == ',' && depth == 0) {
+                params.add(cur.toString().trim());
+                cur.setLength(0);
+            } else {
+                cur.append(c);
+            }
         }
+        if (cur.length() > 0) params.add(cur.toString().trim());
         return params;
     }
 
     private boolean paramsMatch(CtMethod<?> method, List<String> sigParams) {
         if (method.getParameters().size() != sigParams.size()) return false;
         for (int i = 0; i < sigParams.size(); i++) {
-            String expected = sigParams.get(i);
+            String expected = eraseType(sigParams.get(i));
             String actual = method.getParameters().get(i).getType() != null
                     ? method.getParameters().get(i).getType().getSimpleName() : "";
             if (!actual.equals(expected)) return false;
         }
         return true;
+    }
+
+    /**
+     * Strips generic type arguments and array brackets from a user-provided
+     * parameter type so it can be compared to the erased simple name from the
+     * AST. For example {@code "List<String>"} becomes {@code "List"} and
+     * {@code "int[]"} stays {@code "int[]"}.
+     */
+    private static String eraseType(String type) {
+        String t = type.trim();
+        int lt = t.indexOf('<');
+        if (lt >= 0) t = t.substring(0, lt).trim();
+        return t;
     }
 
     private String listAvailableSignatures(List<CtMethod<?>> methods) {
