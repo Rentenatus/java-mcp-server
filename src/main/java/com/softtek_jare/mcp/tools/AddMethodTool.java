@@ -103,6 +103,11 @@ public class AddMethodTool extends BaseJavaTool {
                 if ("final".equals(paramType) && parts.length > 1) {
                     paramType = parts[1];
                 }
+                // Erase generic type arguments so that "List<String>" matches
+                // the erased "List" used by TypeErasureChecker. Without this,
+                // a clash with an existing "List" parameter is missed.
+                int lt = paramType.indexOf('<');
+                if (lt >= 0) paramType = paramType.substring(0, lt).trim();
                 paramTypes.add(paramType);
             }
         }
