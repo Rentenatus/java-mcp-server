@@ -269,8 +269,11 @@ public class RewriteSignatureTool extends BaseJavaTool {
     }
 
     private int updateCallers(ProjectEntry entry, CtType<?> targetType, String methodName, CtMethod<?> target) {
-        // Collect all files containing calls to the method
-        java.util.Set<java.nio.file.Path> callerFiles = new java.util.HashSet<>();
+        // Collect exact call-site line numbers from the AST so TODO markers
+        // are only inserted at genuine invocations of the target method, not
+        // at any line that happens to contain "methodName(" (which would
+        // produce false positives for same-named methods on other classes).
+        java.util.Map<java.nio.file.Path, java.util.Set<Integer>> callSites = new java.util.HashMap<>();
         for (CtType<?> type : entry.model().getAllTypes()) {
             for (CtMethod<?> method : type.getMethods()) {
                 if (method.getBody() == null) continue;
@@ -282,30 +285,32 @@ public class RewriteSignatureTool extends BaseJavaTool {
                             && exec.getSimpleName().equals(methodName)) {
                         java.nio.file.Path f = type.getPosition().getFile() != null
                                 ? type.getPosition().getFile().toPath() : null;
-                        if (f != null) callerFiles.add(f);
+                        int line = inv.getPosition().getLine();
+                        if (f != null && line > 0) {
+                            callSites.computeIfAbsent(f, k -> new java.util.TreeSet<>()).add(line);
+                        }
                     }
                 }
             }
         }
-        // Insert TODO comments at call sites — text-based search avoids stale AST positions
+        // Insert TODO comments at the exact call-site lines
         int count = 0;
         java.nio.file.Path declaringFile = target.getPosition().getFile() != null
                 ? target.getPosition().getFile().toPath() : null;
-        for (java.nio.file.Path file : callerFiles) {
+        for (var fileEntry : callSites.entrySet()) {
+            java.nio.file.Path file = fileEntry.getKey();
             // Skip the declaring file: the signature was already rewritten above,
             // and inserting a TODO before the declaration line would corrupt it.
             if (declaringFile != null && file.equals(declaringFile)) continue;
+            java.util.Set<Integer> lineNumbers = fileEntry.getValue();
             try {
                 String source = java.nio.file.Files.readString(file);
                 String[] lines = source.split("\n", -1);
                 StringBuilder newSource = new StringBuilder();
                 int localCount = 0;
                 for (int i = 0; i < lines.length; i++) {
-                    // Search for methodName( in code (not in comments or strings)
-                    String trimmed = lines[i].trim();
-                    boolean isComment = trimmed.startsWith("//") || trimmed.startsWith("*")
-                            || trimmed.startsWith("/*") || trimmed.startsWith("/**");
-                    if (!isComment && lines[i].contains(methodName + "(")) {
+                    int lineNum = i + 1; // 1-indexed
+                    if (lineNumbers.contains(lineNum)) {
                         newSource.append("// TODO: signature of ").append(methodName)
                                 .append(" changed — review arguments\n");
                         localCount++;
