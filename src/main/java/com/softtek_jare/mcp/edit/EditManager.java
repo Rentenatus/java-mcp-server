@@ -33,6 +33,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -58,6 +59,7 @@ public class EditManager {
     private boolean inTransaction = false;
     private final Map<Path, String> pendingChanges = new HashMap<>();
     private final List<String> editLog = new ArrayList<>();
+    private Set<Path> lastCommittedFiles = Set.of();
 
     /**
      * Creates an EditManager with backup directory under the user home.
@@ -215,9 +217,22 @@ public class EditManager {
             // Transaction remains open
             return false;
         }
+        Set<Path> committedFiles = new HashSet<>(pendingChanges.keySet());
         pendingChanges.clear();
         inTransaction = false;
+        lastCommittedFiles = java.util.Collections.unmodifiableSet(new java.util.HashSet<>(committedFiles));
         return true;
+    }
+
+    /**
+     * Returns the set of files written by the last successful commitTransaction.
+     * The caller (e.g. TransactionTools.Commit) uses this to update project
+     * entries so that subsequent edits skip fingerprint validation for these
+     * files — without this, the next edit to a committed file would fail with
+     * a "modified since project load" error.
+     */
+    public Set<Path> getLastCommittedFiles() {
+        return lastCommittedFiles;
     }
 
     public void rollbackTransaction() {

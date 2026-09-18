@@ -96,6 +96,24 @@ public class TransactionTools extends BaseJavaTool {
             boolean success = editManager.commitTransaction();
             if (success) {
                 manager.markAllDirty();
+                // Update editedFiles on all loaded entries so that subsequent
+                // edits to committed files skip fingerprint validation. Without
+                // this, the next edit would fail with a "modified since load"
+                // error because the on-disk fingerprint changed during commit.
+                java.util.Set<java.nio.file.Path> committed = editManager.getLastCommittedFiles();
+                for (var entry : manager.list()) {
+                    java.util.Set<java.nio.file.Path> updated = new java.util.HashSet<>(entry.editedFiles());
+                    updated.addAll(committed);
+                    var updatedEntry = new com.softtek_jare.mcp.model.ProjectEntry(
+                            entry.name(), entry.alias(), entry.expiryDate(),
+                            entry.projectDir(), entry.launcher(), entry.model(),
+                            entry.buildType(), entry.delomboked(), entry.lombokVersion(),
+                            entry.originalProjectDir(), entry.originalSource(),
+                            entry.sourceFingerprints(), entry.expired(), entry.editable(),
+                            entry.modulesDetected(), entry.modulesLoaded(), true,
+                            java.util.Collections.unmodifiableSet(updated));
+                    manager.updateEntry(updatedEntry);
+                }
                 return ok("Transaction committed. " + pending + " file(s) written atomically.");
             } else {
                 return error("Commit failed. All temp files cleaned up. Transaction is still open — "
