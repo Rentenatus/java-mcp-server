@@ -69,7 +69,6 @@ public class RewriteSignatureTool extends BaseJavaTool {
             "name", Map.of("type", "string", "description", "Project name or alias"),
             "className", Map.of("type", "string", "description", "Fully qualified class name"),
             "methodName", Map.of("type", "string", "description", "Method name"),
-            "oldSignature", Map.of("type", "string", "description", "Current parameter types (e.g. 'int, String')"),
             "newReturnType", Map.of("type", "string", "description", "New return type (omit to keep current)"),
             "newParameters", Map.of("type", "string", "description", "New parameter list (e.g. 'int count, String label')"),
             "mode", Map.of("type", "string", "description", "'signature_only' or 'signature_and_callers' (default)")
@@ -109,11 +108,8 @@ public class RewriteSignatureTool extends BaseJavaTool {
         CtMethod<?> target = candidates.get(0);
 
         // Build new signature string
-        String oldSignature = methodName + "(" + getParamString(target) + ")";
         String retType = newReturnType != null ? newReturnType : target.getType().getSimpleName();
         String params = newParameters != null ? newParameters : getParamString(target);
-
-        String newSignature = retType + " " + methodName + "(" + params + ")";
 
         // Text-based signature replacement in source
         Path file = target.getPosition().getFile() != null
@@ -140,7 +136,7 @@ public class RewriteSignatureTool extends BaseJavaTool {
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("Signature changed: ").append(oldSignature).append(" -> ").append(newDecl).append("\n");
+        sb.append("Signature changed: ").append(methodName).append("(").append(getParamString(target)).append(") -> ").append(newDecl).append("\n");
         sb.append("Mode: ").append(mode).append("\n");
         if ("signature_and_callers".equals(mode)) {
             sb.append("Callers updated: ").append(callersUpdated).append("\n");
@@ -205,25 +201,6 @@ public class RewriteSignatureTool extends BaseJavaTool {
                 }
             } catch (java.io.IOException e) {
                 // skip unreadable files
-            }
-        }
-        return count;
-    }
-
-    private int countCallers(ProjectEntry entry, CtType<?> targetType, String methodName) {
-        int count = 0;
-        for (CtType<?> type : entry.model().getAllTypes()) {
-            for (CtMethod<?> method : type.getMethods()) {
-                if (method.getBody() == null) continue;
-                var invocations = method.getBody().getElements(new TypeFilter<>(CtInvocation.class));
-                for (var inv : invocations) {
-                    var exec = inv.getExecutable();
-                    if (exec.getDeclaringType() != null
-                            && exec.getDeclaringType().getQualifiedName().equals(targetType.getQualifiedName())
-                            && exec.getSimpleName().equals(methodName)) {
-                        count++;
-                    }
-                }
             }
         }
         return count;
