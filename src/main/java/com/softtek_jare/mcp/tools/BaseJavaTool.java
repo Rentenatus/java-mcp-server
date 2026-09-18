@@ -403,17 +403,122 @@ public abstract class BaseJavaTool implements McpTool {
  */
     protected static int annotationSearchStart(String[] lines, int declLine) {
         int start = declLine;
-        for (int i = declLine - 2; i >= 0; i--) { // line directly above the declaration
+        int parenDepth = 0; // >0 means we are inside a multi-line annotation
+        for (int i = declLine - 2; i >= 0; i--) {
             String t = lines[i].trim();
-            if (t.isEmpty()) break;
-            if (t.startsWith("@") || t.startsWith("//") || t.startsWith("*")
-                    || t.startsWith("/*") || t.startsWith("*/")) {
-                start = i + 1; // convert to 1-indexed
-            } else {
+            if (parenDepth <= 0 && t.isEmpty()) break;
+            boolean isPattern = t.startsWith("@") || t.startsWith("//") || t.startsWith("*")
+                    || t.startsWith("/*") || t.startsWith("*/");
+            if (!isPattern && parenDepth <= 0) {
+                // Check if this could be the closing ')' of a multi-line annotation
+                int net = countNetParens(lines[i]);
+                if (net > 0) {
+                    parenDepth = net;
+                    start = i + 1;
+                    continue;
+                }
+                break;
+            }
+            start = i + 1;
+            parenDepth += countNetParens(lines[i]);
+            if (parenDepth < 0) parenDepth = 0;
+        }
+        return start;
+    }
+
+    /**
+     * Counts net parentheses (closing minus opening) in a line, skipping
+     * string and char literals. Positive = more closing parens than opening.
+     */
+    static int countNetParens(String line) {
+        int net = 0;
+        boolean inStr = false, inChar = false;
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (inStr) {
+                if (c == '\\') { i++; continue; }
+                if (c == '"') inStr = false;
+                continue;
+            }
+            if (inChar) {
+                if (c == '\\') { i++; continue; }
+                if (c == '\'') inChar = false;
+                continue;
+            }
+            if (c == '"') { inStr = true; continue; }
+            if (c == '\'') { inChar = true; continue; }
+            if (c == '(') net--;
+            else if (c == ')') net++;
+        }
+        return net;
+    }
+
+    /**
+     * Finds {@code @annotation} (optionally with a parenthesized argument list)
+     * within the character range {@code [startOffset, endOffset)} of {@code source}
+     * and replaces it with {@code replacement}. Handles multi-line annotations
+     * and nested parentheses inside string/char-aware scanning. Returns the
+     * modified source, or {@code null} if the annotation was not found.
+     */
+    protected static String replaceAnnotationInWindow(String source, int startOffset, int endOffset,
+                                                       String annotation, String replacement) {
+        String search = "@" + annotation;
+        int windowLen = endOffset - startOffset;
+        int atIdx = -1;
+        for (int i = startOffset; i <= endOffset - search.length(); i++) {
+            if (source.regionMatches(i, search, 0, search.length())) {
+                // Whole-word check: preceding char must not be an identifier part
+                if (i > startOffset && Character.isJavaIdentifierPart(source.charAt(i - 1))) continue;
+                // Following char must not be an identifier part (avoids @Override matching @Overrides)
+                int after = i + search.length();
+                if (after < endOffset && Character.isJavaIdentifierPart(source.charAt(after))) continue;
+                atIdx = i;
                 break;
             }
         }
-        return start;
+        if (atIdx < 0) return null;
+
+        int afterName = atIdx + search.length();
+        // Skip whitespace
+        int j = afterName;
+        while (j < endOffset && Character.isWhitespace(source.charAt(j))) j++;
+
+        int replaceEnd;
+        if (j < endOffset && source.charAt(j) == '(') {
+            // Find matching ')' with depth tracking, skipping strings/chars
+            int close = findMatchingParen(source, j, endOffset);
+            if (close < 0) return null; // unmatched — abort
+            replaceEnd = close + 1;
+        } else {
+            replaceEnd = afterName;
+        }
+        return source.substring(0, atIdx) + replacement + source.substring(replaceEnd);
+    }
+
+    /** Returns the index of the ')' matching the '(' at {@code open}, or -1. */
+    private static int findMatchingParen(String s, int open, int limit) {
+        int depth = 0;
+        int i = open;
+        boolean inStr = false, inChar = false;
+        while (i < limit) {
+            char c = s.charAt(i);
+            if (inStr) {
+                if (c == '\\') { i += 2; continue; }
+                if (c == '"') inStr = false;
+                i++; continue;
+            }
+            if (inChar) {
+                if (c == '\\') { i += 2; continue; }
+                if (c == '\'') inChar = false;
+                i++; continue;
+            }
+            if (c == '"') { inStr = true; i++; continue; }
+            if (c == '\'') { inChar = true; i++; continue; }
+            if (c == '(') depth++;
+            else if (c == ')') { depth--; if (depth == 0) return i; }
+            i++;
+        }
+        return -1;
     }
 
 /**

@@ -35,8 +35,6 @@ import com.softtek_jare.mcp.model.ProjectEntry;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import spoon.reflect.declaration.CtField;
 import spoon.reflect.declaration.CtMethod;
@@ -128,31 +126,26 @@ public class EditAnnotationTool extends BaseJavaTool {
             searchStartLine = 1;
             searchEndLine = Integer.MAX_VALUE;
         }
-        Pattern pattern = Pattern.compile(
-            "@\\Q" + annotation + "\\E(\\([^)]*(?:\"[^\"]*\"[^)]*)*\\))?",
-            Pattern.MULTILINE);
-        boolean found = false;
         String replacement = "@" + annotation;
         if (newAttributes != null && !newAttributes.isBlank()) {
             replacement += "(" + newAttributes + ")";
         }
-        for (int i = 0; i < lines.length; i++) {
-            int lineNum = i + 1;
-            if (lineNum >= searchStartLine && lineNum <= searchEndLine) {
-                Matcher m = pattern.matcher(lines[i]);
-                if (m.find()) {
-                    lines[i] = m.replaceFirst(replacement);
-                    found = true;
-                    break;
-                }
-            }
+        // Calculate character offsets for the search window
+        int startOffset = 0;
+        for (int i = 0; i < searchStartLine - 1 && i < lines.length; i++) {
+            startOffset += lines[i].length() + 1;
         }
-        if (!found) {
+        int endOffset = startOffset;
+        for (int i = searchStartLine - 1; i < searchEndLine && i < lines.length; i++) {
+            endOffset += lines[i].length() + 1;
+        }
+        endOffset = Math.min(endOffset, source.length());
+        String newSource = replaceAnnotationInWindow(source, startOffset, endOffset, annotation, replacement);
+        if (newSource == null) {
             return error("Annotation '@" + annotation + "' not found on " + targetType
                     + (targetName != null ? " '" + targetName + "'" : "") + ". Use add_annotation to add it first.");
         }
-        String newSource = String.join("\n", lines);
-        entry = editManager.writeFile(entry, file, newSource.toString(), null);
+        entry = editManager.writeFile(entry, file, newSource, null);
         manager.updateEntry(entry);
         editManager.logEdit(toolName());
 
