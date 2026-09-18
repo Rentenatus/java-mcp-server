@@ -149,7 +149,7 @@ public class AddAnnotationTool extends BaseJavaTool {
         // Insert annotation line before the declaration
         String indent = "";
         for (char c : lines[insertLine].toCharArray()) {
-            if (c == ' ') indent += " ";
+            if (c == ' ' || c == '\t') indent += c;
             else break;
         }
         String[] newLines = new String[lines.length + 1];
