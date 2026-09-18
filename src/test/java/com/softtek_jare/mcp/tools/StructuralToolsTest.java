@@ -149,6 +149,27 @@ class StructuralToolsTest {
     }
 
     @Test
+    void addClassWithBodyResolvesImports() throws Exception {
+        // A project type that the new class body should reference and auto-import.
+        Path utilDir = srcDir.resolve("util");
+        Files.createDirectories(utilDir);
+        Files.writeString(utilDir.resolve("Helper.java"), "package util;\n\nclass Helper {}\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+        AddClassTool tool = new AddClassTool(mgr, new com.softtek_jare.mcp.edit.EditManager());
+
+        CallToolResult result = tool.handle(null, reqClass(entry.name(), "demo",
+                "Widget", "class", "  Helper helper;"));
+
+        assertFalse(result.isError());
+        Path newFile = srcDir.resolve("demo/Widget.java");
+        assertTrue(Files.exists(newFile));
+        String content = Files.readString(newFile);
+        assertTrue(content.contains("import util.Helper;"));
+        assertTrue(content.contains("Helper helper;"));
+        mgr.remove(entry.name());
+    }
+
+    @Test
     void moveClassRelocatesAndRewrites() throws Exception {
         Path oldDir = srcDir.resolve("com/oldpkg");
         Files.createDirectories(oldDir);

@@ -90,9 +90,10 @@ public class AddClassTool extends BaseJavaTool {
         }
         Files.createDirectories(packageDir);
 
-        // Auto-import resolution for body
+        // Auto-import resolution for body (target class does not exist yet)
+        var importResult = new com.softtek_jare.mcp.edit.AutoImportResolver.Result(java.util.List.of(), java.util.List.of());
         if (body != null && !body.isBlank()) {
-            var importResult = new AutoImportResolver().resolve(entry, null, body);
+            importResult = new AutoImportResolver().resolve(entry, null, body);
             if (!importResult.unresolvedTypes().isEmpty()) {
                 return error("Cannot resolve type(s) in body: " + importResult.unresolvedTypes()
                         + ". Provide the fully qualified name or add the dependency.");
@@ -108,7 +109,10 @@ public class AddClassTool extends BaseJavaTool {
         }
         src.append("}\n");
 
-        entry = editManager.writeFile(entry, file, src.toString(), null);
+        // Insert any imports resolved from the body before writing
+        String content = insertImports(src.toString(), importResult.importsToAdd());
+
+        entry = editManager.writeFile(entry, file, content, null);
         manager.updateEntry(entry);
         editManager.logEdit(toolName());
 

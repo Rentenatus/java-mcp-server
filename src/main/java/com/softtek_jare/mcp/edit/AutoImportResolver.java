@@ -58,7 +58,10 @@ public class AutoImportResolver {
      * @return resolution result with imports to add and/or unresolved types
      */
     public Result resolve(ProjectEntry entry, CtType<?> targetClass, String bodyText) {
-        Set<String> alreadyImported = collectImportedTypeNames(targetClass);
+        // targetClass may be null when creating a brand-new class (no existing
+        // type yet). In that case there is no existing import scope, same-package
+        // membership, or self-reference to skip.
+        Set<String> alreadyImported = targetClass != null ? collectImportedTypeNames(targetClass) : new HashSet<>();
         Set<String> projectTypeNames = collectProjectTypeNames(entry);
         Set<String> javaLangTypes = collectJavaLangTypes();
 
@@ -72,13 +75,13 @@ public class AutoImportResolver {
             // Skip if already imported or in java.lang or same package
             if (alreadyImported.contains(simpleName)) continue;
             if (javaLangTypes.contains(simpleName)) continue;
-            if (targetClass.getPackage() != null) {
+            if (targetClass != null && targetClass.getPackage() != null) {
                 // Check if type is in same package
                 String samePackageQualified = targetClass.getPackage().getQualifiedName() + "." + simpleName;
                 if (projectTypeNames.contains(samePackageQualified)) continue;
             }
             // Check if it's the target class itself
-            if (targetClass.getSimpleName().equals(simpleName)) continue;
+            if (targetClass != null && targetClass.getSimpleName().equals(simpleName)) continue;
 
             // Search project types for a match
             String qualified = findInProject(entry, simpleName);
@@ -94,6 +97,7 @@ public class AutoImportResolver {
 
     private Set<String> collectImportedTypeNames(CtType<?> type) {
         Set<String> names = new HashSet<>();
+        if (type == null) return names;
         // Best-effort: collect simple names of types in the same model that are
         // directly referenced by the target class
         if (type.getFactory() != null) {
