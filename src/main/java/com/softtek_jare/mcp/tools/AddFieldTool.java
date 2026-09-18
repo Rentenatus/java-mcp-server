@@ -122,7 +122,7 @@ public class AddFieldTool extends BaseJavaTool {
         if (file == null) return error("Cannot determine source file.");
 
         String source = Files.readString(file);
-        int lastBrace = source.lastIndexOf('}');
+        int lastBrace = findClassClosingBrace(source, targetType.getPosition().getEndLine());
         if (lastBrace < 0) return error("Malformed source: no closing brace found.");
 
         String newContent = source.substring(0, lastBrace)

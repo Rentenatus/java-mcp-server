@@ -521,6 +521,27 @@ public abstract class BaseJavaTool implements McpTool {
         return -1;
     }
 
+    /**
+     * Finds the offset of the class closing brace by searching for the last
+     * {@code '}'} on or before the class end line (1-indexed). This avoids
+     * matching a {@code '}'} that appears in a trailing comment after the
+     * class body, which {@code source.lastIndexOf('}')} would incorrectly
+     * return.
+     */
+    protected static int findClassClosingBrace(String source, int classEndLine) {
+        int lineStart = 0;
+        for (int i = 1; i < classEndLine && lineStart < source.length(); i++) {
+            int nl = source.indexOf('\n', lineStart);
+            if (nl < 0) { lineStart = source.length(); break; }
+            lineStart = nl + 1;
+        }
+        int nextNl = source.indexOf('\n', lineStart);
+        int lineEnd = nextNl < 0 ? source.length() : nextNl;
+        int lastBrace = source.lastIndexOf('}', lineEnd > 0 ? lineEnd - 1 : 0);
+        if (lastBrace >= lineStart) return lastBrace;
+        return source.lastIndexOf('}'); // fallback
+    }
+
 /**
  * Result of a dirty check: how many files were checked and which changed.
  */
