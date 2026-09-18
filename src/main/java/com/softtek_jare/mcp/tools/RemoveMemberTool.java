@@ -196,13 +196,14 @@ public class RemoveMemberTool extends BaseJavaTool {
         String[] lines = source.split("\n", -1);
         int startIdx = startLine - 1; // 0-indexed
 
-        // Walk backwards to include Javadoc/comments above the method
+        // Walk backwards to include Javadoc/comments/annotations above the method
         int commentStart = startIdx;
         for (int i = startIdx - 1; i >= 0; i--) {
             String trimmed = lines[i].trim();
             if (trimmed.isEmpty()) break;
             if (trimmed.startsWith("/**") || trimmed.startsWith("*") || trimmed.startsWith("*/")
-                    || trimmed.startsWith("//") || trimmed.startsWith("/*")) {
+                    || trimmed.startsWith("//") || trimmed.startsWith("/*")
+                    || trimmed.startsWith("@")) {
                 commentStart = i;
             } else {
                 break;
@@ -243,13 +244,14 @@ public class RemoveMemberTool extends BaseJavaTool {
         // Single-field declaration (possibly spanning multiple lines): remove
         // the declaration lines plus any Javadoc/comment block above them.
 
-        // Walk backwards to include Javadoc/comments above the field
+        // Walk backwards to include Javadoc/comments/annotations above the field
         int commentStart = startIdx;
         for (int i = startIdx - 1; i >= 0; i--) {
             String trimmed = lines[i].trim();
             if (trimmed.isEmpty()) break;
             if (trimmed.startsWith("/**") || trimmed.startsWith("*") || trimmed.startsWith("*/")
-                    || trimmed.startsWith("//") || trimmed.startsWith("/*")) {
+                    || trimmed.startsWith("//") || trimmed.startsWith("/*")
+                    || trimmed.startsWith("@")) {
                 commentStart = i;
             } else {
                 break;
