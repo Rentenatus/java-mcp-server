@@ -176,11 +176,17 @@ public class RewriteSignatureTool extends BaseJavaTool {
         }
         // Insert TODO comments at call sites — text-based search avoids stale AST positions
         int count = 0;
+        java.nio.file.Path declaringFile = target.getPosition().getFile() != null
+                ? target.getPosition().getFile().toPath() : null;
         for (java.nio.file.Path file : callerFiles) {
+            // Skip the declaring file: the signature was already rewritten above,
+            // and inserting a TODO before the declaration line would corrupt it.
+            if (declaringFile != null && file.equals(declaringFile)) continue;
             try {
                 String source = java.nio.file.Files.readString(file);
                 String[] lines = source.split("\n", -1);
                 StringBuilder newSource = new StringBuilder();
+                int localCount = 0;
                 for (int i = 0; i < lines.length; i++) {
                     // Search for methodName( in code (not in comments or strings)
                     String trimmed = lines[i].trim();
@@ -189,16 +195,17 @@ public class RewriteSignatureTool extends BaseJavaTool {
                     if (!isComment && lines[i].contains(methodName + "(")) {
                         newSource.append("// TODO: signature of ").append(methodName)
                                 .append(" changed — review arguments\n");
-                        count++;
+                        localCount++;
                     }
                     newSource.append(lines[i]);
                     if (i < lines.length - 1) newSource.append("\n");
                 }
-                if (count > 0) {
+                if (localCount > 0) {
                     entry = editManager.writeFile(entry, file, newSource.toString(), null);
                     manager.updateEntry(entry);
                     editManager.logEdit(toolName());
                 }
+                count += localCount;
             } catch (java.io.IOException e) {
                 // skip unreadable files
             }

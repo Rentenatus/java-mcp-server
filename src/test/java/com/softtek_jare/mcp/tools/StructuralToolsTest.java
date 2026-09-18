@@ -93,6 +93,26 @@ class StructuralToolsTest {
     }
 
     @Test
+    void rewriteSignatureAndCallersMarksCallSitesNotDeclaration() throws Exception {
+        Path decl = srcDir.resolve("Svc.java");
+        Files.writeString(decl, "class Svc {\n  int compute(int x) {\n    return x;\n  }\n}\n");
+        Path caller = srcDir.resolve("Use.java");
+        Files.writeString(caller, "class Use {\n  int run(Svc s) {\n    return s.compute(5);\n  }\n}\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+        RewriteSignatureTool tool = new RewriteSignatureTool(mgr, editMgr);
+
+        CallToolResult result = tool.handle(null, req(entry.name(), "Svc", "compute",
+                "int", "int x, int y", "signature_and_callers"));
+
+        assertFalse(result.isError());
+        // The declaring file must NOT get a TODO comment before its declaration.
+        assertFalse(Files.readString(decl).contains("TODO"));
+        // The caller file must get the TODO marker at the call site.
+        assertTrue(Files.readString(caller).contains("TODO: signature of compute"));
+        mgr.remove(entry.name());
+    }
+
+    @Test
     void addPackageCreatesDirectory() throws Exception {
         Files.writeString(srcDir.resolve("X.java"), "class X {}");
         ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
