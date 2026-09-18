@@ -336,20 +336,58 @@ public class RenameSymbolTool extends BaseJavaTool {
     private static String replaceInCodeOnly(String source, java.util.regex.Pattern namePattern, String newName) {
         String[] lines = source.split("\n", -1);
         StringBuilder result = new StringBuilder();
+        boolean inBlockComment = false; // tracks /* ... */ spanning multiple lines
         for (int i = 0; i < lines.length; i++) {
             String line = lines[i];
             String trimmed = line.trim();
-            // Skip comment lines
-            if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")
+            if (inBlockComment) {
+                // Inside a multi-line block comment — copy verbatim
+                result.append(line);
+                if (trimmed.contains("*/")) inBlockComment = false;
+            } else if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")
                     || trimmed.startsWith("/**") || trimmed.startsWith("*/")) {
                 result.append(line);
+                // Check if a block comment starts but doesn't close on this line
+                if (trimmed.startsWith("/*") && !trimmed.contains("*/")) inBlockComment = true;
             } else {
                 // Process line, skipping string literals
                 result.append(replaceOutsideStrings(line, namePattern, newName));
+                // Detect a block comment that opens but doesn't close on this line
+                // (e.g. code followed by /* trailing comment without closing)
+                if (hasUnclosedBlockComment(line)) inBlockComment = true;
             }
             if (i < lines.length - 1) result.append("\n");
         }
         return result.toString();
+    }
+
+    /** Returns true if the line contains an unclosed block comment opener. */
+    private static boolean hasUnclosedBlockComment(String line) {
+        int idx = 0;
+        boolean inString = false;
+        boolean inChar = false;
+        while (idx < line.length()) {
+            char c = line.charAt(idx);
+            if (inString) {
+                if (c == '\\') { idx += 2; continue; }
+                if (c == '"') inString = false;
+                idx++; continue;
+            }
+            if (inChar) {
+                if (c == '\\') { idx += 2; continue; }
+                if (c == '\'') inChar = false;
+                idx++; continue;
+            }
+            if (c == '"') { inString = true; idx++; continue; }
+            if (c == '\'') { inChar = true; idx++; continue; }
+            if (c == '/' && idx + 1 < line.length() && line.charAt(idx + 1) == '*') {
+                // Found opening /* — check if */ appears later
+                int close = line.indexOf("*/", idx + 2);
+                return close < 0;
+            }
+            idx++;
+        }
+        return false;
     }
 
     private static String replaceOutsideStrings(String line, java.util.regex.Pattern namePattern, String newName) {
