@@ -40,12 +40,6 @@ import java.util.Objects;
 import java.nio.file.Files;
 import com.softtek_jare.mcp.model.Fingerprint;
 import spoon.reflect.declaration.CtType;
-import java.util.List;
-import java.util.ArrayList;
-import java.util.Objects;
-import java.nio.file.Files;
-import com.softtek_jare.mcp.model.Fingerprint;
-import spoon.reflect.declaration.CtType;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -96,7 +96,14 @@ public class AddMethodTool extends BaseJavaTool {
         List<String> paramTypes = new ArrayList<>();
         if (parameters != null && !parameters.isBlank()) {
             for (String p : parameters.split(",")) {
-                paramTypes.add(p.trim().split("\\s+")[0]);
+                String trimmed = p.trim();
+                // Skip 'final' modifier to get the actual type
+                String[] parts = trimmed.split("\\s+");
+                String paramType = parts[0];
+                if ("final".equals(paramType) && parts.length > 1) {
+                    paramType = parts[1];
+                }
+                paramTypes.add(paramType);
             }
         }
 

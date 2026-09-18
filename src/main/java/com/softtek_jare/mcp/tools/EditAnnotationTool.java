@@ -125,7 +125,7 @@ public class EditAnnotationTool extends BaseJavaTool {
         // Apply regex only within the target line range — find and replace in-place
         String[] lines = source.split("\n", -1);
         Pattern pattern = Pattern.compile(
-            "@\\Q" + annotation + "\\E(\\([^)]*\\))?",
+            "@\\Q" + annotation + "\\E(\\([^)]*(?:\"[^\"]*\"[^)]*)*\\))?",
             Pattern.MULTILINE);
         boolean found = false;
         String replacement = "@" + annotation;

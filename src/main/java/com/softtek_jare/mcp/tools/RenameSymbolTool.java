@@ -143,9 +143,7 @@ public class RenameSymbolTool extends BaseJavaTool {
                 Path newFile = oldFile.resolveSibling(newName + ".java");
                 if (!oldFile.equals(newFile) && Files.exists(oldFile)) {
                     Files.move(oldFile, newFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-                    entry = editManager.writeFile(entry, newFile, Files.readString(newFile), null);
-                    manager.updateEntry(entry);
-                editManager.logEdit(toolName());
+                    editManager.logEdit(toolName());
                 }
             }
         }
@@ -291,8 +289,7 @@ public class RenameSymbolTool extends BaseJavaTool {
                     Path file = lit.getPosition().getFile() != null
                             ? lit.getPosition().getFile().toPath() : null;
                     int line = lit.getPosition().getLine();
-                    String context = lit.getPosition().getCompilationUnit() != null
-                            ? "\"" + s + "\"" : "\"" + s + "\"";
+                    String context = "\"" + s + "\"";
                     result.add(new UnresolvedRef(
                             file != null ? file.getFileName().toString() : "unknown",
                             line, context));

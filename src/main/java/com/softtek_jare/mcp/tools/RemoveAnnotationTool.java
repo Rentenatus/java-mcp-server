@@ -121,7 +121,7 @@ public class RemoveAnnotationTool extends BaseJavaTool {
         String[] lines = source.split("\n", -1);
         // Match @Annotation or @Annotation(...) within the target line range
         Pattern pattern = Pattern.compile(
-            "@\\Q" + annotation + "\\E(\\([^)]*\\))?",
+            "@\\Q" + annotation + "\\E(\\([^)]*(?:\"[^\"]*\"[^)]*)*\\))?",
             Pattern.MULTILINE);
         boolean found = false;
         for (int i = 0; i < lines.length; i++) {
