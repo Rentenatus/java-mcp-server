@@ -75,6 +75,10 @@ public class AddClassTool extends BaseJavaTool {
         String type = arg(request, "type");
         String body = arg(request, "body");
         if (type == null) type = "class";
+        if (!type.equals("class") && !type.equals("enum")
+                && !type.equals("interface") && !type.equals("abstract")) {
+            return error("type must be 'class', 'enum', 'interface', or 'abstract' (got: " + type + ")");
+        }
 
         ProjectEntry entry = findEntry(name);
         requireEditable(entry);
