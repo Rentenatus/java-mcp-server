@@ -166,6 +166,50 @@ class AnnotationToolsTest {
         mgr.remove(entry.name());
     }
 
+    @Test
+    void editMethodAnnotationAttributes() throws Exception {
+        Path file = srcDir.resolve("M.java");
+        Files.writeString(file, "class M {\n  @Transactional(value=false)\n  void handle() {}\n}\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = editAnno.handle(null, reqEditMethod(entry.name(), "method",
+                "M", "handle", "Transactional", "value=true"));
+
+        assertFalse(result.isError());
+        String written = Files.readString(file);
+        assertTrue(written.contains("value=true"));
+        assertFalse(written.contains("value=false"));
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void removeMethodAnnotation() throws Exception {
+        Path file = srcDir.resolve("N.java");
+        Files.writeString(file, "class N {\n  @Override\n  void handle() {}\n}\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = removeAnno.handle(null, reqRemoveMethod(entry.name(), "method",
+                "N", "handle", "Override"));
+
+        assertFalse(result.isError());
+        assertFalse(Files.readString(file).contains("@Override"));
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void removeFieldAnnotation() throws Exception {
+        Path file = srcDir.resolve("P.java");
+        Files.writeString(file, "class P {\n  @Deprecated\n  int count;\n}\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = removeAnno.handle(null, reqRemoveMethod(entry.name(), "field",
+                "P", "count", "Deprecated"));
+
+        assertFalse(result.isError());
+        assertFalse(Files.readString(file).contains("@Deprecated"));
+        mgr.remove(entry.name());
+    }
+
     private static CallToolRequest req(String name, String targetType, String className,
             String targetName, String annotation, String attributes) {
         Map<String, Object> args = new HashMap<>();
@@ -187,5 +231,28 @@ class AnnotationToolsTest {
         args.put("annotation", annotation);
         args.put("newAttributes", newAttributes);
         return new CallToolRequest("edit_annotation", args);
+    }
+
+    private static CallToolRequest reqEditMethod(String name, String targetType, String className,
+            String targetName, String annotation, String newAttributes) {
+        Map<String, Object> args = new HashMap<>();
+        args.put("name", name);
+        args.put("targetType", targetType);
+        args.put("className", className);
+        args.put("targetName", targetName);
+        args.put("annotation", annotation);
+        args.put("newAttributes", newAttributes);
+        return new CallToolRequest("edit_annotation", args);
+    }
+
+    private static CallToolRequest reqRemoveMethod(String name, String targetType, String className,
+            String targetName, String annotation) {
+        Map<String, Object> args = new HashMap<>();
+        args.put("name", name);
+        args.put("targetType", targetType);
+        args.put("className", className);
+        args.put("targetName", targetName);
+        args.put("annotation", annotation);
+        return new CallToolRequest("remove_annotation", args);
     }
 }

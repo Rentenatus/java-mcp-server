@@ -390,6 +390,33 @@ public abstract class BaseJavaTool implements McpTool {
     }
 
 /**
+ * Computes the 1-indexed start line of the annotation/comment block that
+ * immediately precedes the given declaration line. Annotations sit above the
+ * declaration, so a search window that starts at the declaration line misses
+ * them. This walks upward over contiguous annotation and comment lines
+ * (stopping at a blank line or a non-annotation line) and returns the first
+ * line of that block, or {@code declLine} if there is none.
+ *
+ * @param lines    the source split into lines (any line ending already stripped)
+ * @param declLine the 1-indexed declaration line
+ * @return the 1-indexed start line of the preceding annotation block
+ */
+    protected static int annotationSearchStart(String[] lines, int declLine) {
+        int start = declLine;
+        for (int i = declLine - 2; i >= 0; i--) { // line directly above the declaration
+            String t = lines[i].trim();
+            if (t.isEmpty()) break;
+            if (t.startsWith("@") || t.startsWith("//") || t.startsWith("*")
+                    || t.startsWith("/*") || t.startsWith("*/")) {
+                start = i + 1; // convert to 1-indexed
+            } else {
+                break;
+            }
+        }
+        return start;
+    }
+
+/**
  * Result of a dirty check: how many files were checked and which changed.
  */
     protected record DirtyCheckResult(int filesChecked, List<String> changedFiles, List<String> deletedFiles, List<String> newFiles) {

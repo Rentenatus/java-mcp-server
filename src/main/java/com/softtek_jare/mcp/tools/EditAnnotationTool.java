@@ -97,33 +97,37 @@ public class EditAnnotationTool extends BaseJavaTool {
                 ? type.getPosition().getFile().toPath() : null;
         if (file == null) return error("Cannot determine source file.");
 
-        // Determine line range to search based on targetType/targetName
-        // For class: search from line 1 up to the class declaration line (annotations are above it)
-        int searchStartLine = 1;
-        int searchEndLine = Integer.MAX_VALUE;
+        // Determine the declaration line of the target member; the search window
+        // is resolved after reading the source so the annotation block above the
+        // declaration can be included (annotations sit above the declaration line).
+        int declLine = -1;
         if ("method".equals(targetType) && targetName != null) {
             CtMethod<?> method = type.getMethods().stream()
                     .filter(m -> m.getSimpleName().equals(targetName))
                     .findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("Method '" + targetName + "' not found in " + className));
-            searchStartLine = method.getPosition().getLine();
-            searchEndLine = method.getPosition().getEndLine();
+            declLine = method.getPosition().getLine();
         } else if ("field".equals(targetType) && targetName != null) {
             CtField<?> field = type.getFields().stream()
                     .filter(f -> f.getSimpleName().equals(targetName))
                     .findFirst()
                     .orElseThrow(() -> new IllegalArgumentException("Field '" + targetName + "' not found in " + className));
-            searchStartLine = field.getPosition().getLine();
-            searchEndLine = field.getPosition().getEndLine();
+            declLine = field.getPosition().getLine();
         } else if ("class".equals(targetType)) {
-            // Annotations on class are above the declaration line
-            searchStartLine = 1;
-            searchEndLine = type.getPosition().getLine();
+            declLine = type.getPosition().getLine();
         }
 
         String source = Files.readString(file);
-        // Apply regex only within the target line range — find and replace in-place
         String[] lines = source.split("\n", -1);
+        int searchStartLine;
+        int searchEndLine;
+        if (declLine > 0) {
+            searchStartLine = annotationSearchStart(lines, declLine);
+            searchEndLine = declLine;
+        } else {
+            searchStartLine = 1;
+            searchEndLine = Integer.MAX_VALUE;
+        }
         Pattern pattern = Pattern.compile(
             "@\\Q" + annotation + "\\E(\\([^)]*(?:\"[^\"]*\"[^)]*)*\\))?",
             Pattern.MULTILINE);
