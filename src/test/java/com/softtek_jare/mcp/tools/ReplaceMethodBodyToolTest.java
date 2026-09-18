@@ -85,6 +85,11 @@ class ReplaceMethodBodyToolTest {
         assertFalse(result.isError());
         String written = Files.readString(file);
         assertTrue(written.contains("42"));
+        // The method signature must survive the body replacement.
+        assertTrue(written.contains("int compute()"));
+        // The class closing brace must still be present and exactly once after the body.
+        long classBraces = written.lines().filter(l -> l.trim().equals("}")).count();
+        assertTrue(classBraces >= 2);
         mgr.remove(entry.name());
     }
 

@@ -194,53 +194,127 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
     }
 
     private static String replaceBodyInSource(String source, int bodyStartLine, int bodyEndLine, String newBody) {
-        if (bodyStartLine < 1 || bodyEndLine < bodyStartLine) return source;
-        String[] lines = source.split("\n", -1);
-        int startIdx = bodyStartLine - 1; // 0-indexed
-        int endIdx = Math.min(bodyEndLine, lines.length); // exclusive
+        if (bodyStartLine < 1) return source;
 
-        // Find the opening brace line and closing brace line
-        int openBraceIdx = -1;
-        for (int i = startIdx - 1; i >= 0 && i < lines.length; i--) {
-            if (lines[i].contains("{")) { openBraceIdx = i; break; }
+        // The body position line is the line of the opening '{'. Find the first
+        // '{' at or after that line, then brace-match to the closing '}'. Both
+        // scans skip string/char literals and comments so braces inside them do
+        // not corrupt the match. The previous line-based heuristic searched
+        // backwards from the body line and matched the enclosing class brace,
+        // deleting the method signature.
+        int lineStart = lineStartOffset(source, bodyStartLine);
+        int open = indexOfOpeningBrace(source, lineStart);
+        if (open < 0) return source;
+        int close = matchingBrace(source, open);
+        if (close < 0) return source;
+
+        // Indentation of the line containing the opening brace == method indent.
+        int lineBegin = source.lastIndexOf('\n', open) + 1;
+        String methodIndent = leadingWhitespace(source, lineBegin);
+        String bodyIndent = methodIndent + "    ";
+
+        String[] bodyLines = newBody.stripIndent().split("\n", -1);
+        StringBuilder body = new StringBuilder();
+        for (int j = 0; j < bodyLines.length; j++) {
+            body.append(bodyIndent).append(bodyLines[j]);
+            if (j < bodyLines.length - 1) body.append("\n");
         }
-        if (openBraceIdx < 0) openBraceIdx = startIdx; // fallback
 
-        int closeBraceIdx = -1;
-        for (int i = endIdx; i < lines.length; i++) {
-            if (lines[i].trim().equals("}") || lines[i].trim().startsWith("}")) { closeBraceIdx = i; break; }
+        return source.substring(0, open + 1)      // up to and including '{'
+                + "\n" + body + "\n"
+                + methodIndent + "}"              // closing brace at method indent
+                + source.substring(close + 1);     // remainder of the file
+    }
+
+    /** Returns the char offset of the start of the given 1-indexed line. */
+    private static int lineStartOffset(String source, int line1) {
+        int idx = 0;
+        for (int l = 1; l < line1; l++) {
+            int nl = source.indexOf('\n', idx);
+            if (nl < 0) return source.length();
+            idx = nl + 1;
         }
-        if (closeBraceIdx < 0) closeBraceIdx = endIdx - 1; // fallback
+        return idx;
+    }
 
-        // Detect indentation from the opening brace line
-        String indent = "";
-        for (char c : lines[openBraceIdx].toCharArray()) {
-            if (c == ' ') indent += " ";
-            else break;
+    /** Leading whitespace of the (sub)string starting at {@code from}. */
+    private static String leadingWhitespace(String s, int from) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = from; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == ' ' || c == '\t') sb.append(c); else break;
         }
+        return sb.toString();
+    }
 
-        StringBuilder result = new StringBuilder();
-        for (int i = 0; i < lines.length; i++) {
-            if (i == openBraceIdx) {
-                result.append(lines[i]); // keep the opening brace line
-            } else if (i > openBraceIdx && i <= closeBraceIdx) {
-                if (i == closeBraceIdx) {
-                    // Indent each line of the new body
-                    String bodyIndent = indent + "    ";
-                    String[] bodyLines = newBody.stripIndent().split("\n", -1);
-                    for (int j = 0; j < bodyLines.length; j++) {
-                        result.append(bodyIndent).append(bodyLines[j]);
-                        if (j < bodyLines.length - 1) result.append("\n");
-                    }
-                    result.append("\n");
-                    result.append(lines[i]); // keep the closing brace line
-                }
-                // skip old body lines
-            } else {
-                result.append(lines[i]);
+    /** First '{' at or after {@code from}, skipping string/char literals and comments. */
+    private static int indexOfOpeningBrace(String s, int from) {
+        int i = from, n = s.length();
+        boolean block = false;
+        while (i < n) {
+            char c = s.charAt(i);
+            if (block) {
+                if (c == '*' && i + 1 < n && s.charAt(i + 1) == '/') { block = false; i += 2; continue; }
+                i++; continue;
             }
-            if (i < lines.length - 1) result.append("\n");
+            if (c == '/' && i + 1 < n && s.charAt(i + 1) == '/') {
+                int nl = s.indexOf('\n', i); i = (nl < 0) ? n : nl + 1; continue;
+            }
+            if (c == '/' && i + 1 < n && s.charAt(i + 1) == '*') { block = true; i += 2; continue; }
+            if (c == '"') { i = skipString(s, i); continue; }
+            if (c == '\'') { i = skipChar(s, i); continue; }
+            if (c == '{') return i;
+            i++;
         }
-        return result.toString();
+        return -1;
+    }
+
+    /** Index of the '}' matching the '{' at {@code open}, or -1. */
+    private static int matchingBrace(String s, int open) {
+        int depth = 0, i = open, n = s.length();
+        boolean block = false;
+        while (i < n) {
+            char c = s.charAt(i);
+            if (block) {
+                if (c == '*' && i + 1 < n && s.charAt(i + 1) == '/') { block = false; i += 2; continue; }
+                i++; continue;
+            }
+            if (c == '/' && i + 1 < n && s.charAt(i + 1) == '/') {
+                int nl = s.indexOf('\n', i); i = (nl < 0) ? n : nl + 1; continue;
+            }
+            if (c == '/' && i + 1 < n && s.charAt(i + 1) == '*') { block = true; i += 2; continue; }
+            if (c == '"') { i = skipString(s, i); continue; }
+            if (c == '\'') { i = skipChar(s, i); continue; }
+            if (c == '{') depth++;
+            else if (c == '}') { depth--; if (depth == 0) return i; }
+            i++;
+        }
+        return -1;
+    }
+
+    /** Returns the index just past the closing '"' of the string starting at {@code i}. */
+    private static int skipString(String s, int i) {
+        int n = s.length();
+        i++; // opening quote
+        while (i < n) {
+            char c = s.charAt(i);
+            if (c == '\\') { i += 2; continue; }
+            if (c == '"') return i + 1;
+            i++;
+        }
+        return n;
+    }
+
+    /** Returns the index just past the closing '\'' of the char literal starting at {@code i}. */
+    private static int skipChar(String s, int i) {
+        int n = s.length();
+        i++; // opening quote
+        while (i < n) {
+            char c = s.charAt(i);
+            if (c == '\\') { i += 2; continue; }
+            if (c == '\'') return i + 1;
+            i++;
+        }
+        return n;
     }
 }
