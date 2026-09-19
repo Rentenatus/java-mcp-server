@@ -650,6 +650,25 @@ public abstract class BaseJavaTool implements McpTool {
     // --- Shared annotation search-window helper (used by edit/remove annotation tools) ---
 
     /**
+     * Validates an annotation target specification shared by the add, edit,
+     * and remove annotation tools.
+     *
+     * @param targetType {@code "class"}, {@code "method"}, or {@code "field"}
+     * @param targetName method or field name (null/blank for class)
+     * @return an error message if invalid, or {@code null} if valid
+     */
+    protected static String validateAnnotationTarget(String targetType, String targetName) {
+        if (!"class".equals(targetType) && !"method".equals(targetType) && !"field".equals(targetType)) {
+            return "targetType must be 'class', 'method', or 'field'";
+        }
+        if (("method".equals(targetType) || "field".equals(targetType))
+                && (targetName == null || targetName.isBlank())) {
+            return "targetName required for method and field annotations";
+        }
+        return null;
+    }
+
+    /**
      * Computes the character offset range {@code [startOffset, endOffset)} for
      * the annotation block preceding the declaration of the given target. The
      * window includes the annotation block (which sits above the declaration)

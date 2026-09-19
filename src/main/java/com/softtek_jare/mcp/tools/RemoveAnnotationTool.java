@@ -90,12 +90,8 @@ public class RemoveAnnotationTool extends BaseJavaTool {
                 ? type.getPosition().getFile().toPath() : null;
         if (file == null) return error("Cannot determine source file.");
 
-        if (!"class".equals(targetType) && !"method".equals(targetType) && !"field".equals(targetType)) {
-            return error("targetType must be 'class', 'method', or 'field'");
-        }
-        if (("method".equals(targetType) || "field".equals(targetType)) && (targetName == null || targetName.isBlank())) {
-            return error("targetName required for method and field annotations");
-        }
+        String targetErr = validateAnnotationTarget(targetType, targetName);
+        if (targetErr != null) return error(targetErr);
 
         String source = Files.readString(file);
         int[] window = annotationWindow(source, type, targetType, targetName);
