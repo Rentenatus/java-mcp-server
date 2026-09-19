@@ -75,10 +75,10 @@ When AI agents attempt to analyse or refactor Java codebases using purely textua
 | `edit_line` | Replace a single line in a source file. CR-normalized matching; preserves existing line ending. |
 | `rename_symbol` | Rename a class, method, or field across every caller. Returns `unresolved_references` for string literals (reflection boundary). |
 | `replace_method_body` | Replace a method body. Exact signature match. Automatic import resolution; unresolved types block the edit. |
-| `add_method` | Add a method to a class. Erasure collision check; auto-import resolution. |
+| `add_method` | Add a method to a class. Erasure collision check; auto-import resolution. Detects constructors when methodName matches the class name (no return-type prefix). |
 | `add_field` | Add a field to a class. Duplicate detection; auto-import resolution for type and initializer. |
 | `remove_member` | Remove a method or field. `safe` mode refuses if references exist; `hard` mode removes and warns about dangling references. |
-| `add_annotation` | Add an annotation to a class, method, or field. Optional attributes. |
+| `add_annotation` | Add an annotation to a class, method, or field. Optional attributes. Validates `@Override` semantics (rejects if the method overrides nothing). |
 | `remove_annotation` | Remove an annotation. Errors if not present (no silent no-op). |
 | `edit_annotation` | Change annotation attributes. Errors if not present. |
 | `rewrite_signature` | Change return type and/or parameters. `signature_only` or `signature_and_callers` mode. |

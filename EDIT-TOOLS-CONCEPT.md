@@ -2,7 +2,7 @@
 
 Extending `java-mcp-server` from read-only analysis to deterministic code modification.
 
-Status: Concept — not implemented.
+Status: Implemented.
 
 ---
 
@@ -166,6 +166,7 @@ Add a new method to an existing class.
 - Checks for existing methods with the same name and same erased signature. On collision:
 
   `Method 'foo(List<String>)' already exists in class Bar with the same erased signature.`
+- **Constructor detection.** When `methodName` matches the enclosing type's simple name and `returnType` is the same name, the tool emits a constructor (no return-type prefix) instead of `WinLine WinLine(...)`. This applies to classes and enums, not interfaces.
 - **Automatic import resolution** applies (same behavior as `replace_method_body`).
 
 #### `add_field`
@@ -185,6 +186,7 @@ Add an annotation to a class, method, or field.
 - Example: `add_annotation({ targetType: "method", targetName: "handleRequest", annotation: "Override" })`
 - Example: `add_annotation({ targetType: "method", targetName: "handleRequest", annotation: "RequestMapping", attributes: { "value": "/new" } })`
 - Checks for duplicates. If the annotation is already present with the same attributes, returns an error. If present with different attributes, offers `edit_annotation` instead.
+- **`@Override` validation.** When adding `@Override` to a method, the tool checks `CtMethod.getTopDefinitions()`. If the method does not override any supertype method, the edit is rejected with a clear error — a bogus `@Override` would cause a compile error.
 - **Automatic import resolution** applies to the annotation type.
 
 #### `remove_annotation`
