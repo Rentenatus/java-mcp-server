@@ -91,10 +91,10 @@ class AnnotationToolsTest {
         ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
 
         CallToolResult result = addAnno.handle(null, req(entry.name(), "method",
-                "Ctrl", "handle", "Override", null));
+                "Ctrl", "handle", "Deprecated", null));
 
         assertFalse(result.isError());
-        assertTrue(Files.readString(file).contains("@Override"));
+        assertTrue(Files.readString(file).contains("@Deprecated"));
         mgr.remove(entry.name());
     }
 

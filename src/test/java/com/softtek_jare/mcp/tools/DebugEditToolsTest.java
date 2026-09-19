@@ -258,10 +258,10 @@ class DebugEditToolsTest {
         CallToolResult r = tool.handle(null, req("add_annotation", Map.of(
                 "name", entry.name(), "className", "C",
                 "targetType", "method", "targetName", "work",
-                "annotation", "Override")));
+                "annotation", "Deprecated")));
 
         String written = Files.readString(file);
-        boolean annotated = written.lines().anyMatch(l -> l.trim().equals("@Override"));
+        boolean annotated = written.lines().anyMatch(l -> l.trim().equals("@Deprecated"));
         boolean declSurvives = written.contains("void work()");
         report("P34 annotation before declaration", !r.isError() && annotated && declSurvives,
                 "annotated=" + annotated + ", declSurvives=" + declSurvives + "\n" + written);

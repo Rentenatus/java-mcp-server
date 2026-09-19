@@ -132,6 +132,10 @@ public class AddAnnotationTool extends BaseJavaTool {
                 return error("Multiple methods named '" + targetName + "' in " + className
                         + ". Annotation tools do not yet support overloaded methods.");
             }
+            // Validate @Override semantics: reject when the method does not
+            // override any supertype method (would cause a compile error).
+            String overrideErr = validateOverride(method, annotation, targetName);
+            if (overrideErr != null) return error(overrideErr);
             // P44: use fresh positions for insertion line
             CtMethod<?> freshMethod = posType.getMethods().stream()
                     .filter(m -> m.getSimpleName().equals(targetName))
@@ -188,5 +192,32 @@ public class AddAnnotationTool extends BaseJavaTool {
         if (qualifiedName.equals(search)) return true;
         int dot = qualifiedName.lastIndexOf('.');
         return dot >= 0 && qualifiedName.substring(dot + 1).equals(search);
+    }
+
+    /**
+     * Validates that {@code @Override} is only added to a method that genuinely
+     * overrides a supertype method. Returns an error message if the annotation
+     * is {@code @Override} (or {@code java.lang.Override}) and the method has no
+     * top-level definition in any supertype; returns {@code null} otherwise
+     * (including for non-{@code @Override} annotations).
+     *
+     * <p>In noclasspath mode, supertypes may not resolve, so this only rejects
+     * when {@code getTopDefinitions()} is confidently empty — i.e. the method
+     * truly has no override target. For external supertypes that did not
+     * resolve, {@code getTopDefinitions()} is also empty, but this is the same
+     * risk the compiler itself runs in noclasspath parsing; the alternative
+     * (silently accepting a bogus @Override) produces a guaranteed compile
+     * error, which is worse.
+     */
+    private static String validateOverride(CtMethod<?> method, String annotation, String targetName) {
+        String simple = annotation;
+        int dot = annotation.lastIndexOf('.');
+        if (dot >= 0) simple = annotation.substring(dot + 1);
+        if (!"Override".equals(simple)) return null;
+        if (method.getTopDefinitions().isEmpty()) {
+            return "Method '" + targetName + "' does not override any supertype method. "
+                    + "@Override would cause a compile error.";
+        }
+        return null;
     }
 }

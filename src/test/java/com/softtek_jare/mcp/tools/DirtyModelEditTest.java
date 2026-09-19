@@ -109,21 +109,21 @@ class DirtyModelEditTest {
         assertFalse(r1.isError());
 
         // Now annotate "second" — must go before second(), not before first()
-        CallToolResult r2 = addAnno.handle(null, annoReq(entry.name(), "method", "Service", "second", "Override"));
+        CallToolResult r2 = addAnno.handle(null, annoReq(entry.name(), "method", "Service", "second", "Deprecated"));
         assertFalse(r2.isError(), "add_annotation failed: " + r2.content());
 
         String written = Files.readString(file);
-        // @Override must be directly before void second()
+        // @Deprecated must be directly before void second()
         String[] lines = written.split("\n", -1);
         boolean foundAnnoBeforeSecond = false;
         for (int i = 0; i < lines.length; i++) {
-            if (lines[i].trim().equals("@Override") && i + 1 < lines.length
+            if (lines[i].trim().equals("@Deprecated") && i + 1 < lines.length
                     && lines[i + 1].contains("void second()")) {
                 foundAnnoBeforeSecond = true;
                 break;
             }
         }
-        assertTrue(foundAnnoBeforeSecond, "@Override should be before second(), not before first():\n" + written);
+        assertTrue(foundAnnoBeforeSecond, "@Deprecated should be before second(), not before first():\n" + written);
         mgr.remove(entry.name());
     }
 
