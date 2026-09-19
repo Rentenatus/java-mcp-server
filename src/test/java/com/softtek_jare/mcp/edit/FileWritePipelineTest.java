@@ -69,7 +69,7 @@ class FileWritePipelineTest {
     }
 
     @Test
-    void writeFilePathrowsOnFingerprintMismatch() throws Exception {
+    void writeFileThrowsOnStaleStoredFingerprint() throws Exception {
         Path file = tempDir.resolve("B.java");
         Files.writeString(file, "class B {}");
         Fingerprint stale = new Fingerprint(999999L, 999999L);
