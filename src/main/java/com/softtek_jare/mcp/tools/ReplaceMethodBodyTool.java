@@ -199,15 +199,19 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
     }
 
     /**
-     * Strips generic type arguments and array brackets from a user-provided
-     * parameter type so it can be compared to the erased simple name from the
-     * AST. For example {@code "List<String>"} becomes {@code "List"} and
-     * {@code "int[]"} stays {@code "int[]"}.
+     * Strips generic type arguments, array brackets, and fully-qualified
+     * package prefixes from a user-provided parameter type so it can be
+     * compared to the erased simple name from the AST. For example
+     * {@code "List<String>"} becomes {@code "List"}, {@code "int[]"} stays
+     * {@code "int[]"}, and {@code "java.lang.String"} becomes {@code "String"}.
      */
     private static String eraseType(String type) {
         String t = type.trim();
         int lt = t.indexOf('<');
         if (lt >= 0) t = t.substring(0, lt).trim();
+        // Strip fully-qualified package prefix: "java.lang.String" -> "String"
+        int lastDot = t.lastIndexOf('.');
+        if (lastDot >= 0) t = t.substring(lastDot + 1);
         return t;
     }
 
