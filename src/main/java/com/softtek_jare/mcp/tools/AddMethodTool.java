@@ -140,6 +140,14 @@ public class AddMethodTool extends BaseJavaTool {
         // If a body IS given on an interface, emit a default method (Java 8+).
         boolean abstractMethod = isInterface && !hasBody;
         boolean defaultMethod = isInterface && hasBody;
+        // Constructor detection: when the method name matches the enclosing
+        // type's simple name and the return type is the same name, emit a
+        // constructor (no return-type prefix). A constructor never uses the
+        // 'default' keyword and is never abstract.
+        String simpleReturn = simpleTypeName(returnType);
+        boolean isConstructor = !isInterface
+                && methodName.equals(targetType.getSimpleName())
+                && simpleReturn.equals(targetType.getSimpleName());
         String memberIndent = "    ";
         String bodyIndent = "        ";
         StringBuilder methodSrc = new StringBuilder();
@@ -149,7 +157,11 @@ public class AddMethodTool extends BaseJavaTool {
         } else if (modifiers != null && !modifiers.isBlank()) {
             methodSrc.append(modifiers).append(" ");
         }
-        methodSrc.append(returnType).append(" ").append(methodName).append("(");
+        if (isConstructor) {
+            methodSrc.append(methodName).append("(");
+        } else {
+            methodSrc.append(returnType).append(" ").append(methodName).append("(");
+        }
         if (parameters != null && !parameters.isBlank()) {
             methodSrc.append(parameters);
         }
@@ -215,5 +227,20 @@ public class AddMethodTool extends BaseJavaTool {
         int lastDot = typePart.lastIndexOf('.');
         if (lastDot >= 0) typePart = typePart.substring(lastDot + 1);
         return typePart;
+    }
+
+    /**
+     * Reduces a type reference to its simple name: erases generic arguments
+     * and strips the package prefix. Used for constructor detection so that a
+     * fully-qualified return type still matches the enclosing type's simple
+     * name.
+     */
+    private static String simpleTypeName(String type) {
+        String t = type.trim();
+        int lt = t.indexOf('<');
+        if (lt >= 0) t = t.substring(0, lt).trim();
+        int lastDot = t.lastIndexOf('.');
+        if (lastDot >= 0) t = t.substring(lastDot + 1);
+        return t;
     }
 }
