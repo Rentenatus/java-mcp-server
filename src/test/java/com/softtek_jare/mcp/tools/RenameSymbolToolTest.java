@@ -207,6 +207,25 @@ class RenameSymbolToolTest {
         mgr.remove(entry.name());
     }
 
+    @Test
+    void renameOverloadedMethodDeclarationOnlyErrors() throws Exception {
+        Path file = srcDir.resolve("Over.java");
+        Files.writeString(file, """
+            class Over {
+                int process(int x) { return x; }
+                String process(String s) { return s; }
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = tool.handle(null, mockRequestDeclOnly(
+                entry.name(), "Over", "process", "execute", "method"));
+
+        assertTrue(result.isError());
+        assertTrue(result.content().toString().contains("overloaded"));
+        mgr.remove(entry.name());
+    }
+
     private static CallToolRequest mockRequest(String name, String className,
             String oldName, String newName, String scope) {
         Map<String, Object> args = new HashMap<>();
@@ -215,6 +234,18 @@ class RenameSymbolToolTest {
         args.put("oldName", oldName);
         args.put("newName", newName);
         args.put("scope", scope);
+        return new CallToolRequest("rename_symbol", args);
+    }
+
+    private static CallToolRequest mockRequestDeclOnly(String name, String className,
+            String oldName, String newName, String scope) {
+        Map<String, Object> args = new HashMap<>();
+        args.put("name", name);
+        args.put("className", className);
+        args.put("oldName", oldName);
+        args.put("newName", newName);
+        args.put("scope", scope);
+        args.put("updateCallers", false);
         return new CallToolRequest("rename_symbol", args);
     }
 }

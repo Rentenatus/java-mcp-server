@@ -98,6 +98,15 @@ public class RemoveAnnotationTool extends BaseJavaTool {
         // P46: use fresh-parse positions to avoid stale annotation window after prior edits
         CtType<?> freshType = locateFreshType(file, className);
         CtType<?> posType = (freshType != null) ? freshType : type;
+        // P56: error on overloaded methods (same as P50 in AddAnnotationTool)
+        if ("method".equals(targetType) && targetName != null) {
+            long methodCount = posType.getMethods().stream()
+                    .filter(m -> m.getSimpleName().equals(targetName)).count();
+            if (methodCount > 1) {
+                return error("Multiple methods named '" + targetName + "' in " + className
+                        + ". Annotation tools do not yet support overloaded methods.");
+            }
+        }
         int[] window = annotationWindow(source, posType, targetType, targetName);
         int startOffset = window[0];
         int endOffset = window[1];

@@ -210,6 +210,48 @@ class AnnotationToolsTest {
         mgr.remove(entry.name());
     }
 
+    @Test
+    void addAnnotationToOverloadedMethodErrors() throws Exception {
+        Path file = srcDir.resolve("Over.java");
+        Files.writeString(file, "class Over {\n  int process(int x) { return x; }\n  String process(String s) { return s; }\n}\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = addAnno.handle(null, req(entry.name(), "method",
+                "Over", "process", "Override", null));
+
+        assertTrue(result.isError());
+        assertTrue(result.content().toString().contains("Multiple methods"));
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void editAnnotationOnOverloadedMethodErrors() throws Exception {
+        Path file = srcDir.resolve("Over2.java");
+        Files.writeString(file, "class Over2 {\n  @Transactional(value=false)\n  int process(int x) { return x; }\n  String process(String s) { return s; }\n}\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = editAnno.handle(null, reqEditMethod(entry.name(), "method",
+                "Over2", "process", "Transactional", "value=true"));
+
+        assertTrue(result.isError());
+        assertTrue(result.content().toString().contains("Multiple methods"));
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void removeAnnotationFromOverloadedMethodErrors() throws Exception {
+        Path file = srcDir.resolve("Over3.java");
+        Files.writeString(file, "class Over3 {\n  @Override\n  int process(int x) { return x; }\n  @Override\n  String process(String s) { return s; }\n}\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = removeAnno.handle(null, reqRemoveMethod(entry.name(), "method",
+                "Over3", "process", "Override"));
+
+        assertTrue(result.isError());
+        assertTrue(result.content().toString().contains("Multiple methods"));
+        mgr.remove(entry.name());
+    }
+
     private static CallToolRequest req(String name, String targetType, String className,
             String targetName, String annotation, String attributes) {
         Map<String, Object> args = new HashMap<>();

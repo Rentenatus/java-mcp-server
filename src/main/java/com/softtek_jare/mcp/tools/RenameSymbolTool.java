@@ -114,6 +114,19 @@ public class RenameSymbolTool extends BaseJavaTool {
             return error("scope must be 'method', 'field', or 'class'");
         }
 
+        // P57: declaration-only rename of overloaded methods is not safe —
+        // replaceOnLineOnly targets a single declaration line, leaving other
+        // overloads with the old name.
+        if (!updateCallers && "method".equals(scope)) {
+            long methodCount = targetType.getMethods().stream()
+                    .filter(m -> m.getSimpleName().equals(oldName)).count();
+            if (methodCount > 1) {
+                return error("Cannot rename method '" + oldName + "' in declaration-only mode "
+                        + "(updateCallers=false) when overloaded methods exist (" + methodCount
+                        + " overloads). Use updateCallers=true to rename all overloads globally.");
+            }
+        }
+
         // Write affected files via EditManager — line-aware replacement preserves formatting
         // and skips string literals and comments to avoid corrupting them
         java.util.regex.Pattern namePattern = java.util.regex.Pattern.compile(
@@ -125,8 +138,11 @@ public class RenameSymbolTool extends BaseJavaTool {
                 // Global: replace all code occurrences (but not strings/comments)
                 newContent = replaceInCodeOnly(source, namePattern, newName);
             } else {
-                // Declaration only: replace only on the declaration line(s)
-                int declLine = getDeclarationLine(scope, targetType, oldName);
+                // P53: use fresh-parse positions for declaration line to avoid
+                // stale model positions after prior edits
+                CtType<?> freshType = locateFreshType(file, className);
+                CtType<?> posType = (freshType != null) ? freshType : targetType;
+                int declLine = getDeclarationLine(scope, posType, oldName);
                 newContent = replaceOnLineOnly(source, namePattern, newName, declLine);
             }
             if (!newContent.equals(source)) {

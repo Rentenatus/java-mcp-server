@@ -63,7 +63,9 @@ public class RemoveMemberTool extends BaseJavaTool {
     @Override protected String toolName() { return "remove_member"; }
     @Override protected String toolDescription() {
         return "Remove a method, field, or class. Safe mode (default): refuses if references exist. "
-                + "Hard mode: removes regardless and lists dangling references.";
+                + "Hard mode: removes regardless and lists dangling references. "
+                + "For overloaded methods, provide the optional 'signature' parameter "
+                + "(comma-separated parameter types, e.g. 'int, String') to disambiguate.";
     }
     @Override protected Map<String, Object> toolProperties() {
         return Map.of(
@@ -71,7 +73,8 @@ public class RemoveMemberTool extends BaseJavaTool {
             "className", Map.of("type", "string", "description", "Fully qualified class name"),
             "memberName", Map.of("type", "string", "description", "Method or field name to remove"),
             "scope", Map.of("type", "string", "description", "'method' or 'field' (default: method)"),
-            "mode", Map.of("type", "string", "description", "'safe' (default) or 'hard'")
+            "mode", Map.of("type", "string", "description", "'safe' (default) or 'hard'"),
+            "signature", Map.of("type", "string", "description", "Comma-separated parameter types (e.g. 'int, String') to disambiguate overloaded methods")
         );
     }
     @Override protected List<String> toolRequired() { return req("name", "className", "memberName"); }
@@ -83,6 +86,7 @@ public class RemoveMemberTool extends BaseJavaTool {
         String memberName = arg(request, "memberName");
         String scope = arg(request, "scope");
         String mode = arg(request, "mode");
+        String signature = arg(request, "signature");
         if (scope == null) scope = "method";
         boolean hard = "hard".equals(mode);
 
@@ -117,12 +121,28 @@ public class RemoveMemberTool extends BaseJavaTool {
         CtType<?> posType = (freshType != null) ? freshType : targetType;
         String newSource;
         if ("method".equals(scope)) {
-            CtMethod<?> method = posType.getMethods().stream()
+            // P54: disambiguate overloaded methods via signature, or error
+            java.util.List<CtMethod<?>> matching = posType.getMethods().stream()
                     .filter(m -> m.getSimpleName().equals(memberName))
-                    .findFirst()
-                    .orElse(null);
-            if (method == null) {
+                    .collect(java.util.stream.Collectors.toList());
+            if (matching.isEmpty()) {
                 return error("Method '" + memberName + "' not found in " + className);
+            }
+            CtMethod<?> method;
+            if (signature != null && !signature.isBlank()) {
+                List<String> sigParams = splitTopLevelCommas(signature);
+                method = matching.stream()
+                        .filter(m -> paramsMatch(m, sigParams))
+                        .findFirst().orElse(null);
+                if (method == null) {
+                    return error("No method matching signature '" + memberName + "(" + signature
+                            + ")' found in " + className);
+                }
+            } else if (matching.size() == 1) {
+                method = matching.get(0);
+            } else {
+                return error("Multiple methods named '" + memberName + "' in " + className
+                        + ". Provide the 'signature' parameter to disambiguate.");
             }
             newSource = removeMethodByPosition(source, method);
         } else if ("field".equals(scope)) {
@@ -258,6 +278,28 @@ public class RemoveMemberTool extends BaseJavaTool {
         // before fieldName is preserved because only the declarator onward is removed.
         String first = quoted + "\\s*(=\\s*[^,;]+)?\\s*,\\s*";
         return line.replaceAll(first, "");
+    }
+
+    /** Compares a method's parameter types against a signature list (P54). */
+    private static boolean paramsMatch(CtMethod<?> method, List<String> sigParams) {
+        if (method.getParameters().size() != sigParams.size()) return false;
+        for (int i = 0; i < sigParams.size(); i++) {
+            String expected = eraseType(sigParams.get(i));
+            String actual = method.getParameters().get(i).getType() != null
+                    ? method.getParameters().get(i).getType().getSimpleName() : "";
+            if (!actual.equals(expected)) return false;
+        }
+        return true;
+    }
+
+    /** Strips generics and package prefix from a parameter type string. */
+    private static String eraseType(String type) {
+        String t = type.trim();
+        int lt = t.indexOf('<');
+        if (lt >= 0) t = t.substring(0, lt).trim();
+        int lastDot = t.lastIndexOf('.');
+        if (lastDot >= 0) t = t.substring(lastDot + 1);
+        return t;
     }
 
     /** Returns the source with the lines [start, end) removed. */

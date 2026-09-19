@@ -150,6 +150,34 @@ class RemoveMemberToolTest {
         mgr.remove(entry.name());
     }
 
+    @Test
+    void overloadedMethodErrorsWithoutSignature() throws Exception {
+        Path file = srcDir.resolve("Over.java");
+        Files.writeString(file, "class Over {\n  int process(int x) { return x; }\n  String process(String s) { return s; }\n}\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = tool.handle(null, req(entry.name(), "Over", "process", "method", "hard"));
+
+        assertTrue(result.isError());
+        assertTrue(result.content().toString().contains("Multiple methods"));
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void overloadedMethodRemovedWithSignature() throws Exception {
+        Path file = srcDir.resolve("Over2.java");
+        Files.writeString(file, "class Over2 {\n  int process(int x) { return x; }\n  String process(String s) { return s; }\n}\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = tool.handle(null, reqWithSig(entry.name(), "Over2", "process", "method", "hard", "int"));
+
+        assertFalse(result.isError());
+        String written = Files.readString(file);
+        assertFalse(written.contains("process(int"));
+        assertTrue(written.contains("process(String"));
+        mgr.remove(entry.name());
+    }
+
     private static CallToolRequest req(String name, String className, String memberName,
             String scope, String mode) {
         Map<String, Object> args = new HashMap<>();
@@ -158,6 +186,18 @@ class RemoveMemberToolTest {
         args.put("memberName", memberName);
         args.put("scope", scope);
         args.put("mode", mode);
+        return new CallToolRequest("remove_member", args);
+    }
+
+    private static CallToolRequest reqWithSig(String name, String className, String memberName,
+            String scope, String mode, String signature) {
+        Map<String, Object> args = new HashMap<>();
+        args.put("name", name);
+        args.put("className", className);
+        args.put("memberName", memberName);
+        args.put("scope", scope);
+        args.put("mode", mode);
+        args.put("signature", signature);
         return new CallToolRequest("remove_member", args);
     }
 }
