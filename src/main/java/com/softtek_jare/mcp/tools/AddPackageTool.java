@@ -72,11 +72,15 @@ public class AddPackageTool extends BaseJavaTool {
         ProjectEntry entry = findEntry(name);
         requireEditable(entry);
 
-        Path srcDir = entry.projectDir();
-        if (srcDir == null) srcDir = entry.originalProjectDir();
+        Path srcDir = ProjectManager.resolveSourceRoot(entry);
+        if (srcDir == null) {
+            srcDir = entry.projectDir();
+            if (srcDir == null) srcDir = entry.originalProjectDir();
+        }
         if (srcDir == null) return error("Cannot determine source directory.");
 
         Path packageDir = srcDir.resolve(packageName.replace(".", "/"));
+        log.info("add_package: srcRoot={}, packageDir={}", srcDir, packageDir);
         if (Files.exists(packageDir)) {
             return error("Package '" + packageName + "' already exists at " + packageDir);
         }

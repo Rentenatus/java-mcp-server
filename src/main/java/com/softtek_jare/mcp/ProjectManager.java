@@ -319,8 +319,10 @@ public class ProjectManager {
             try {
                 launcher = new MavenLauncher(projectDir.toAbsolutePath().toString(), MavenLauncher.SOURCE_TYPE.APP_SOURCE);
                 launcher.getEnvironment().setCommentEnabled(true);
-                applyJdkClasspath(launcher);
-                LOG.info("Using MavenLauncher for {}", projectDir);
+                /* MavenLauncher resolves JDK classpath via ECJ bootclasspath detection;
+                   calling applyJdkClasspath here would break it (see P36). */
+                LOG.info("Using MavenLauncher for {} (NoClasspath={}, JDK via ECJ bootclasspath)",
+                        projectDir, launcher.getEnvironment().getNoClasspath());
                 return launcher;
             } catch (Exception e) {
                 LOG.warn("MavenLauncher failed ({}), falling back to noclasspath", e.getMessage());
@@ -386,6 +388,39 @@ public class ProjectManager {
         Path src = projectDir.resolve("src");
         if (Files.isDirectory(src)) return src;
         return projectDir;
+    }
+
+/**
+ * Resolves the source root directory for a loaded project, used by edit tools
+ * that create new files (add_class, add_package). Derives the root from an
+ * existing type's on-disk position so it works regardless of build system
+ * (Maven, Gradle, RAW), falling back to the {@code src/main/java} convention
+ * and finally to the project directory itself.
+ */
+    public static Path resolveSourceRoot(ProjectEntry entry) {
+        if (entry == null || entry.projectDir() == null) return null;
+        if (entry.model() != null) {
+            for (var t : entry.model().getAllTypes()) {
+                if (t.getPosition() == null || t.getPosition().getFile() == null) continue;
+                Path file = t.getPosition().getFile().toPath().normalize();
+                String pkg = (t.getPackage() != null) ? t.getPackage().getQualifiedName() : "";
+                int segs = pkg.isEmpty() ? 0 : (int) pkg.chars().filter(c -> c == '.').count() + 1;
+                Path root = file.getParent();
+                for (int i = 0; i < segs && root != null; i++) root = root.getParent();
+                if (root != null && Files.isDirectory(root)) {
+                    LOG.info("resolveSourceRoot: derived from {} -> {}", t.getSimpleName(), root);
+                    return root;
+                }
+                break;
+            }
+        }
+        Path conv = entry.projectDir().resolve("src/main/java");
+        if (Files.isDirectory(conv)) {
+            LOG.info("resolveSourceRoot: using convention src/main/java -> {}", conv);
+            return conv;
+        }
+        LOG.info("resolveSourceRoot: fallback to projectDir -> {}", entry.projectDir());
+        return entry.projectDir();
     }
 
 /**

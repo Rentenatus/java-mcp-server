@@ -15,7 +15,7 @@ import java.awt.event.MouseEvent;
 public class TicTacToe extends JFrame {
     private JLabel[][] cells = new JLabel[3][3];
     private JLabel statusLabel = new JLabel("Player X's turn");
-    private char currentPlayer = 'X';
+    private Stone currentPlayer = new XStone();
 
     public TicTacToe() {
         setTitle("Tic-Tac-Toe Game");
@@ -45,6 +45,7 @@ public class TicTacToe extends JFrame {
                     }
                 });
                 cells[r][c] = label;
+                stones[r][c] = new EmptyStone();
                 board.add(label);
             }
         }
@@ -57,52 +58,51 @@ public class TicTacToe extends JFrame {
     }
 
     private void onCellClick(int row, int col) {
-        if (!cells[row][col].getText().isEmpty()) {
+        if (!stones[row][col].isEmpty()) {
             return;
         }
         placeMark(row, col);
         if (checkWin()) {
-            statusLabel.setText("Player " + currentPlayer + " wins!");
-            setTitle("Player " + currentPlayer + " wins!");
+            statusLabel.setText("Player " + currentPlayer.getSymbol() + " wins!");
+            setTitle("Player " + currentPlayer.getSymbol() + " wins!");
             resetBoard();
         } else if (isBoardFull()) {
             statusLabel.setText("Draw! Click to play again.");
             setTitle("Tic-Tac-Toe Game - Draw");
             resetBoard();
         } else {
-            currentPlayer = (currentPlayer == 'X') ? 'O' : 'X';
-            statusLabel.setText("Player " + currentPlayer + "'s turn");
-            setTitle("Tic-Tac-Toe Game - Player " + currentPlayer);
+            currentPlayer = (currentPlayer.getSymbol() == 'X') ? new OStone() : new XStone();
+            statusLabel.setText("Player " + currentPlayer.getSymbol() + "'s turn");
+            setTitle("Tic-Tac-Toe Game - Player " + currentPlayer.getSymbol());
         }
     }
 
     private void placeMark(int row, int col) {
+        Stone stone = currentPlayer;
+        stones[row][col] = stone;
         JLabel label = cells[row][col];
-        label.setText(String.valueOf(currentPlayer));
-        if (currentPlayer == 'X') {
-            label.setForeground(Color.RED);
-        } else {
-            label.setForeground(Color.BLUE);
-        }
+        label.setText(stone.getDisplayText());
+        label.setForeground(stone.getColor());
     }
 
     private boolean checkWin() {
-        String p = String.valueOf(currentPlayer);
+        char p = currentPlayer.getSymbol();
         for (int i = 0; i < 3; i++) {
-            if (cells[i][0].getText().equals(p) && cells[i][1].getText().equals(p) && cells[i][2].getText().equals(p)) return true;
-            if (cells[0][i].getText().equals(p) && cells[1][i].getText().equals(p) && cells[2][i].getText().equals(p)) return true;
+            if (stones[i][0].getSymbol() == p && stones[i][1].getSymbol() == p && stones[i][2].getSymbol() == p) return true;
+            if (stones[0][i].getSymbol() == p && stones[1][i].getSymbol() == p && stones[2][i].getSymbol() == p) return true;
         }
-        if (cells[0][0].getText().equals(p) && cells[1][1].getText().equals(p) && cells[2][2].getText().equals(p)) return true;
-        return cells[0][2].getText().equals(p) && cells[1][1].getText().equals(p) && cells[2][0].getText().equals(p);
+        if (stones[0][0].getSymbol() == p && stones[1][1].getSymbol() == p && stones[2][2].getSymbol() == p) return true;
+        return stones[0][2].getSymbol() == p && stones[1][1].getSymbol() == p && stones[2][0].getSymbol() == p;
     }
 
     private void resetBoard() {
         for (int r = 0; r < 3; r++) {
             for (int c = 0; c < 3; c++) {
+                stones[r][c] = new EmptyStone();
                 cells[r][c].setText("");
             }
         }
-        currentPlayer = 'X';
+        currentPlayer = new XStone();
         statusLabel.setText("Player X's turn");
         setTitle("Tic-Tac-Toe Game");
     }
@@ -110,7 +110,7 @@ public class TicTacToe extends JFrame {
     private boolean isBoardFull() {
         for (int r = 0; r < 3; r++) {
             for (int c = 0; c < 3; c++) {
-                if (cells[r][c].getText().isEmpty()) {
+                if (stones[r][c].isEmpty()) {
                     return false;
                 }
             }
@@ -121,4 +121,6 @@ public class TicTacToe extends JFrame {
     public static void main(String[] args) {
         java.awt.EventQueue.invokeLater(TicTacToe::new);
     }
+
+    private Stone[][] stones = new Stone[3][3];
 }

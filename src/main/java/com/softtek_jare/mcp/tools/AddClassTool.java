@@ -83,12 +83,16 @@ public class AddClassTool extends BaseJavaTool {
         ProjectEntry entry = findEntry(name);
         requireEditable(entry);
 
-        Path srcDir = entry.projectDir();
-        if (srcDir == null) srcDir = entry.originalProjectDir();
+        Path srcDir = ProjectManager.resolveSourceRoot(entry);
+        if (srcDir == null) {
+            srcDir = entry.projectDir();
+            if (srcDir == null) srcDir = entry.originalProjectDir();
+        }
         if (srcDir == null) return error("Cannot determine source directory.");
 
         Path packageDir = srcDir.resolve(packageName.replace(".", "/"));
         Path file = packageDir.resolve(className + ".java");
+        log.info("add_class: srcRoot={}, packageDir={}, file={}", srcDir, packageDir, file);
         if (Files.exists(file)) {
             return error("Class '" + className + "' already exists at " + file);
         }

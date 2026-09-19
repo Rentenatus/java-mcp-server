@@ -104,6 +104,7 @@ public class EditManager {
         // If in transaction, accumulate changes in memory
         if (inTransaction) {
             pendingChanges.put(file.normalize(), newContent);
+            LOG.info("writeFile: DEFERRED (transaction active) — {} ({} bytes buffered in memory)", file.normalize(), newContent.length());
             return entry; // no fingerprint update until commit
         }
 
@@ -117,6 +118,7 @@ public class EditManager {
         try {
             Files.writeString(tempFile, adaptedContent);
             Files.move(tempFile, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            LOG.info("writeFile: IMMEDIATE write - {} ({} bytes, lineEnding={})", file, adaptedContent.length(), lineEnding.equals("\r\n") ? "CRLF" : "LF");
         } catch (IOException e) {
             // Cleanup temp file on failure
             Files.deleteIfExists(tempFile);
@@ -238,6 +240,7 @@ public class EditManager {
             return false;
         }
         Set<Path> committedFiles = new HashSet<>(pendingChanges.keySet());
+        LOG.info("commitTransaction: {} file(s) committed atomically: {}", committedFiles.size(), committedFiles);
         pendingChanges.clear();
         inTransaction = false;
         lastCommittedFiles = java.util.Collections.unmodifiableSet(new java.util.HashSet<>(committedFiles));
@@ -256,6 +259,7 @@ public class EditManager {
     }
 
     public void rollbackTransaction() {
+        LOG.info("rollbackTransaction: {} pending change(s) discarded", pendingChanges.size());
         pendingChanges.clear();
         inTransaction = false;
     }

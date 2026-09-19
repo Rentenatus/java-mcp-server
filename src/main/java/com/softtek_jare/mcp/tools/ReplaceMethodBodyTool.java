@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import spoon.Launcher;
 import spoon.reflect.declaration.CtMethod;
 import spoon.reflect.declaration.CtType;
 
@@ -132,20 +133,33 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
                     + "Provide the fully qualified name or add the dependency.");
         }
 
-        // Record body position before modifying AST
-        if (target.getBody() == null) {
-            return error("Method '" + methodName + "' has no body (abstract or interface method). "
-                    + "Cannot replace body of a method without one.");
-        }
-        int bodyStartLine = target.getBody().getPosition().getLine();
-        int bodyEndLine = target.getBody().getPosition().getEndLine();
-
         // Write file — text-based body replacement preserves formatting and comments
         Path file = targetType.getPosition().getFile() != null
                 ? targetType.getPosition().getFile().toPath() : null;
         if (file == null) {
             return error("Cannot determine source file for class " + targetType.getSimpleName());
         }
+
+        // The in-memory model may be stale: prior edits in this session can shift
+        // line numbers, so bodyStartLine from the loaded model would point at the
+        // wrong brace and corrupt the method (insert instead of replace, see P37).
+        // Re-parse the current on-disk file to obtain accurate body positions.
+        if (target.getBody() == null) {
+            return error("Method '" + methodName + "' has no body (abstract or interface method). "
+                    + "Cannot replace body of a method without one.");
+        }
+        CtMethod<?> freshMethod = locateFreshMethod(file, className, methodName, signature);
+        CtMethod<?> posMethod = (freshMethod != null && freshMethod.getBody() != null) ? freshMethod : target;
+        if (posMethod.getBody() == null) {
+            return error("Method '" + methodName + "' has no body (abstract or interface method). "
+                    + "Cannot replace body of a method without one.");
+        }
+        int bodyStartLine = posMethod.getBody().getPosition().getLine();
+        int bodyEndLine = posMethod.getBody().getPosition().getEndLine();
+        log.info("replace_method_body: {}.{} — model line {} | fresh line {} (file={}, used={})",
+                targetType.getSimpleName(), methodName,
+                target.getBody().getPosition().getLine(), bodyStartLine, file,
+                (posMethod == freshMethod) ? "fresh" : "model-fallback");
 
         String source = LineEndings.readNormalized(file);
         String newContent = replaceBodyInSource(source, bodyStartLine, bodyEndLine, newBody);
@@ -161,6 +175,42 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
         }
         sb.append(formatMultiModuleWarning(entry));
         return ok(sb);
+    }
+
+    /**
+     * Re-parses the current on-disk file in a fresh noclasspath launcher and
+     * returns the method matching {@code methodName}/{@code signature}. This
+     * yields body positions that reflect any edits made since the project model
+     * was loaded, avoiding the stale-line-number corruption described in P37.
+     * Returns {@code null} if the method cannot be located (caller falls back to
+     * the loaded model's method).
+     */
+    private CtMethod<?> locateFreshMethod(Path file, String className, String methodName, String signature) {
+        try {
+            Launcher fresh = new Launcher();
+            fresh.addInputResource(file.toAbsolutePath().toString());
+            fresh.getEnvironment().setNoClasspath(true);
+            fresh.getEnvironment().setCommentEnabled(true);
+            fresh.getEnvironment().setAutoImports(false);
+            fresh.buildModel();
+            CtType<?> t = fresh.getModel().getAllTypes().stream()
+                    .filter(x -> x.getQualifiedName().equals(className))
+                    .findFirst().orElse(null);
+            if (t == null) return null;
+            java.util.List<CtMethod<?>> cands = t.getMethods().stream()
+                    .filter(m -> m.getSimpleName().equals(methodName))
+                    .collect(Collectors.toList());
+            if (signature == null || signature.isBlank()) {
+                return cands.size() == 1 ? cands.get(0) : null;
+            }
+            List<String> sigParams = parseSignature(signature);
+            for (CtMethod<?> m : cands) {
+                if (paramsMatch(m, sigParams)) return m;
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private List<String> parseSignature(String sig) {
