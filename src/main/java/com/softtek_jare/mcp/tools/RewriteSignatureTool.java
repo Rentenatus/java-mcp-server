@@ -264,17 +264,6 @@ public class RewriteSignatureTool extends BaseJavaTool {
         return i;
     }
 
-    /** Returns the index of the ')' matching the '(' at {@code open}, or -1. */
-    private static int findMatchingParen(String s, int open) {
-        int depth = 0;
-        for (int i = open; i < s.length(); i++) {
-            char c = s.charAt(i);
-            if (c == '(') depth++;
-            else if (c == ')') { depth--; if (depth == 0) return i; }
-        }
-        return -1;
-    }
-
     private int updateCallers(ProjectEntry entry, CtType<?> targetType, String methodName, CtMethod<?> target) {
         // Collect exact call-site line numbers from the AST so TODO markers
         // are only inserted at genuine invocations of the target method, not

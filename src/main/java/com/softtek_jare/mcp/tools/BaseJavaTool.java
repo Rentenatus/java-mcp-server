@@ -524,6 +524,16 @@ public abstract class BaseJavaTool implements McpTool {
     }
 
     /**
+     * Returns the index of the ')' matching the '(' at {@code open} within a
+     * single line, skipping string and char literals, or -1. Single-line
+     * wrapper around the offset-based scanner, shared by tools that match a
+     * parameter list on one declaration line.
+     */
+    protected static int findMatchingParen(String line, int open) {
+        return findMatchingParen(line, open, line.length());
+    }
+
+    /**
      * Finds the offset of the class closing brace by searching for the last
      * {@code '}'} on or before the class end line (1-indexed). This avoids
      * matching a {@code '}'} that appears in a trailing comment after the
