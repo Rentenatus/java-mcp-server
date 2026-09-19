@@ -156,4 +156,87 @@ class AutoImportResolverTest {
         assertFalse(result.importsToAdd().contains("A"));
         mgr.remove(entry.name());
     }
+
+    // --- Bug fix tests: static constant access, JDK types, java.lang exceptions ---
+
+    @Test
+    void staticConstantAccessNotMistakenForType() throws Exception {
+        Path src = tempDir.resolve("src");
+        Files.createDirectories(src);
+        Files.writeString(src.resolve("X.java"), "class X {}\n");
+
+        ProjectManager mgr = new ProjectManager();
+        ProjectEntry entry = mgr.load(src.toString(), null, null, true, true);
+        CtType<?> type = entry.model().getAllTypes().stream().findFirst().orElseThrow();
+
+        AutoImportResolver resolver = new AutoImportResolver();
+        // Color.WHITE — WHITE is a static constant, not a type.
+        // BorderLayout.CENTER — CENTER is a static constant, not a type.
+        var result = resolver.resolve(entry, type,
+                "java.awt.Color c = java.awt.Color.WHITE;");
+        // WHITE must not appear in unresolved; Color is a JDK FQN so it's fine too
+        assertTrue(result.unresolvedTypes().isEmpty(),
+                "static constants should not be unresolved, got: " + result.unresolvedTypes());
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void javaLangExceptionNotInHardcodedListResolved() throws Exception {
+        Path src = tempDir.resolve("src");
+        Files.createDirectories(src);
+        Files.writeString(src.resolve("X.java"), "class X {}\n");
+
+        ProjectManager mgr = new ProjectManager();
+        ProjectEntry entry = mgr.load(src.toString(), null, null, true, true);
+        CtType<?> type = entry.model().getAllTypes().stream().findFirst().orElseThrow();
+
+        AutoImportResolver resolver = new AutoImportResolver();
+        // InterruptedException is in java.lang but not in the hardcoded list.
+        // It should be resolved via Class.forName("java.lang.InterruptedException").
+        var result = resolver.resolve(entry, type,
+                "try { Thread.sleep(100); } catch (InterruptedException ex) { }");
+        assertTrue(result.unresolvedTypes().isEmpty(),
+                "InterruptedException should be resolved as java.lang, got: " + result.unresolvedTypes());
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void jdkTypeViaFullyQualifiedNameResolved() throws Exception {
+        Path src = tempDir.resolve("src");
+        Files.createDirectories(src);
+        Files.writeString(src.resolve("X.java"), "class X {}\n");
+
+        ProjectManager mgr = new ProjectManager();
+        ProjectEntry entry = mgr.load(src.toString(), null, null, true, true);
+        CtType<?> type = entry.model().getAllTypes().stream().findFirst().orElseThrow();
+
+        AutoImportResolver resolver = new AutoImportResolver();
+        // javax.swing.Timer is a JDK type referenced via FQN in the body.
+        // Timer should be resolved via Class.forName("javax.swing.Timer").
+        var result = resolver.resolve(entry, type,
+                "javax.swing.Timer t = new javax.swing.Timer(200, null);");
+        assertTrue(result.unresolvedTypes().isEmpty(),
+                "javax.swing.Timer should be resolved as JDK type, got: " + result.unresolvedTypes());
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void nonExistentTypeStillReportedAsUnresolved() throws Exception {
+        Path src = tempDir.resolve("src");
+        Files.createDirectories(src);
+        Files.writeString(src.resolve("X.java"), "class X {}\n");
+
+        ProjectManager mgr = new ProjectManager();
+        ProjectEntry entry = mgr.load(src.toString(), null, null, true, true);
+        CtType<?> type = entry.model().getAllTypes().stream().findFirst().orElseThrow();
+
+        AutoImportResolver resolver = new AutoImportResolver();
+        // NonExistentType is not a project type, not in java.lang, and no FQN
+        // in the body that Class.forName can resolve — must stay unresolved.
+        var result = resolver.resolve(entry, type,
+                "NonExistentType x = new NonExistentType();");
+        assertTrue(result.unresolvedTypes().contains("NonExistentType"),
+                "non-existent type should be unresolved, got: " + result.unresolvedTypes());
+        mgr.remove(entry.name());
+    }
 }

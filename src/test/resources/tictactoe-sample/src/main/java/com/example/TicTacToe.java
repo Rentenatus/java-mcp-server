@@ -75,6 +75,7 @@ public class TicTacToe extends JFrame {
             gameOver = true;
             statusLabel.setText("Player " + currentPlayer.getSymbol() + " wins! Click to play again. X:" + xWins + " O:" + oWins + " D:" + draws);
             setTitle("Player " + currentPlayer.getSymbol() + " wins!");
+            animateWin();
         } else if (isBoardFull()) {
             draws++;
             gameOver = true;
@@ -98,11 +99,25 @@ public class TicTacToe extends JFrame {
     private boolean checkWin() {
         char p = currentPlayer.getSymbol();
         for (int i = 0; i < 3; i++) {
-            if (stones[i][0].getSymbol() == p && stones[i][1].getSymbol() == p && stones[i][2].getSymbol() == p) return true;
-            if (stones[0][i].getSymbol() == p && stones[1][i].getSymbol() == p && stones[2][i].getSymbol() == p) return true;
+            if (stones[i][0].getSymbol() == p && stones[i][1].getSymbol() == p && stones[i][2].getSymbol() == p) {
+                winLine = new int[][]{{i, 0}, {i, 1}, {i, 2}};
+                return true;
+            }
+            if (stones[0][i].getSymbol() == p && stones[1][i].getSymbol() == p && stones[2][i].getSymbol() == p) {
+                winLine = new int[][]{{0, i}, {1, i}, {2, i}};
+                return true;
+            }
         }
-        if (stones[0][0].getSymbol() == p && stones[1][1].getSymbol() == p && stones[2][2].getSymbol() == p) return true;
-        return stones[0][2].getSymbol() == p && stones[1][1].getSymbol() == p && stones[2][0].getSymbol() == p;
+        if (stones[0][0].getSymbol() == p && stones[1][1].getSymbol() == p && stones[2][2].getSymbol() == p) {
+            winLine = new int[][]{{0, 0}, {1, 1}, {2, 2}};
+            return true;
+        }
+        if (stones[0][2].getSymbol() == p && stones[1][1].getSymbol() == p && stones[2][0].getSymbol() == p) {
+            winLine = new int[][]{{0, 2}, {1, 1}, {2, 0}};
+            return true;
+        }
+        winLine = null;
+        return false;
     }
 
     private void resetBoard() {
@@ -144,5 +159,29 @@ public class TicTacToe extends JFrame {
     private boolean gameOver = false;
     public String getScore() {
         return "X:" + xWins + " O:" + oWins + " D:" + draws;
+    }
+    private int[][] winLine = null;
+    private void animateWin() {
+        final java.awt.Color highlight = new java.awt.Color(80, 200, 80);
+        final java.awt.Color normal = new java.awt.Color(255, 255, 255);
+        final int flashCount = 6;
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    for (int p = 0; p < flashCount; p++) {
+                        if (p % 2 == 0) {
+                            for (int[] rc : winLine) { cells[rc[0]][rc[1]].setBackground(highlight); }
+                        } else {
+                            for (int[] rc : winLine) { cells[rc[0]][rc[1]].setBackground(normal); }
+                        }
+                        Thread.sleep(220);
+                    }
+                    for (int[] rc : winLine) { cells[rc[0]][rc[1]].setBackground(normal); }
+                } catch (Exception ex) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }).start();
     }
 }
