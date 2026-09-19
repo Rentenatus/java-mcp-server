@@ -634,4 +634,119 @@ public abstract class BaseJavaTool implements McpTool {
         sb.append("> Call `reload_java_project` to refresh the model.\n\n");
         return sb.toString();
     }
+
+    // --- Shared code-safe text replacement (used by rename/move tools) ---
+
+    /**
+     * Replaces all word-boundary matches of {@code namePattern} with
+     * {@code newName} in code regions of the source, skipping string literals,
+     * char literals, and comments (line, block, Javadoc). This prevents
+     * corrupting string content or comment text that happens to contain the
+     * searched name.
+     */
+    protected static String replaceInCodeOnly(String source, java.util.regex.Pattern namePattern, String newName) {
+        String[] lines = source.split("\n", -1);
+        StringBuilder result = new StringBuilder();
+        boolean inBlockComment = false;
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            String trimmed = line.trim();
+            if (inBlockComment) {
+                result.append(line);
+                if (trimmed.contains("*/")) inBlockComment = false;
+            } else if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")
+                    || trimmed.startsWith("/**") || trimmed.startsWith("*/")) {
+                result.append(line);
+                if (trimmed.startsWith("/*") && !trimmed.contains("*/")) inBlockComment = true;
+            } else {
+                result.append(replaceOutsideStrings(line, namePattern, newName));
+                if (hasUnclosedBlockComment(line)) inBlockComment = true;
+            }
+            if (i < lines.length - 1) result.append("\n");
+        }
+        return result.toString();
+    }
+
+    /** Returns true if the line contains an unclosed block comment opener. */
+    private static boolean hasUnclosedBlockComment(String line) {
+        int idx = 0;
+        boolean inString = false;
+        boolean inChar = false;
+        while (idx < line.length()) {
+            char c = line.charAt(idx);
+            if (inString) {
+                if (c == '\\') { idx += 2; continue; }
+                if (c == '"') inString = false;
+                idx++; continue;
+            }
+            if (inChar) {
+                if (c == '\\') { idx += 2; continue; }
+                if (c == '\'') inChar = false;
+                idx++; continue;
+            }
+            if (c == '"') { inString = true; idx++; continue; }
+            if (c == '\'') { inChar = true; idx++; continue; }
+            if (c == '/' && idx + 1 < line.length() && line.charAt(idx + 1) == '*') {
+                int close = line.indexOf("*/", idx + 2);
+                return close < 0;
+            }
+            idx++;
+        }
+        return false;
+    }
+
+    private static String replaceOutsideStrings(String line, java.util.regex.Pattern namePattern, String newName) {
+        StringBuilder result = new StringBuilder();
+        int i = 0;
+        while (i < line.length()) {
+            char c = line.charAt(i);
+            if (c == '"') {
+                result.append(c);
+                i++;
+                while (i < line.length()) {
+                    char sc = line.charAt(i);
+                    result.append(sc);
+                    i++;
+                    if (sc == '\\' && i < line.length()) {
+                        result.append(line.charAt(i));
+                        i++;
+                    } else if (sc == '"') break;
+                }
+            } else if (c == '\'') {
+                result.append(c);
+                i++;
+                while (i < line.length()) {
+                    char cc = line.charAt(i);
+                    result.append(cc);
+                    i++;
+                    if (cc == '\\' && i < line.length()) {
+                        result.append(line.charAt(i));
+                        i++;
+                    } else if (cc == '\'') break;
+                }
+            } else {
+                int start = i;
+                while (i < line.length()) {
+                    char ch = line.charAt(i);
+                    if (ch == '"' || ch == '\'') break;
+                    if (ch == '/' && i + 1 < line.length() && line.charAt(i + 1) == '/') break;
+                    if (ch == '/' && i + 1 < line.length() && line.charAt(i + 1) == '*') break;
+                    i++;
+                }
+                String codeSegment = line.substring(start, i);
+                result.append(namePattern.matcher(codeSegment).replaceAll(newName));
+                if (i < line.length() && line.charAt(i) == '/' && i + 1 < line.length()
+                        && line.charAt(i + 1) == '/') {
+                    result.append(line.substring(i));
+                    i = line.length();
+                } else if (i < line.length() && line.charAt(i) == '/' && i + 1 < line.length()
+                        && line.charAt(i + 1) == '*') {
+                    int end = line.indexOf("*/", i + 2);
+                    if (end < 0) { result.append(line.substring(i)); i = line.length(); }
+                    else { result.append(line, i, end + 2); i = end + 2; }
+                }
+            }
+        }
+        return result.toString();
+    }
 }

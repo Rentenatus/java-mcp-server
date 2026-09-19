@@ -122,7 +122,9 @@ public class MoveClassTool extends BaseJavaTool {
             if (!Files.exists(file)) continue; // skip deleted files (old class location)
             String content = Files.readString(file);
             if (content.contains(oldQualified)) {
-                String updatedContent = content.replaceAll("\\b" + java.util.regex.Pattern.quote(oldQualified) + "\\b", newQualified);
+                java.util.regex.Pattern qualPattern = java.util.regex.Pattern.compile(
+                        "\\b" + java.util.regex.Pattern.quote(oldQualified) + "\\b");
+                String updatedContent = replaceInCodeOnly(content, qualPattern, newQualified);
                 if (!updatedContent.equals(content)) {
                     entry = editManager.writeFile(entry, file, updatedContent, null);
                     manager.updateEntry(entry);
