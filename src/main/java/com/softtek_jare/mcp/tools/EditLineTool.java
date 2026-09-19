@@ -47,9 +47,9 @@ public class EditLineTool extends BaseJavaTool {
 
     private final EditManager editManager;
 
-/**
- * Constructs the {@code EditLineTool} with the given project manager and edit manager.
- */
+    /**
+     * Constructs the {@code EditLineTool} with the given project manager and edit manager.
+     */
     public EditLineTool(ProjectManager manager, EditManager editManager) {
         super(manager);
         this.editManager = editManager;
@@ -122,9 +122,9 @@ public class EditLineTool extends BaseJavaTool {
         return ok(sb);
     }
 
-/**
- * Resolves a file path relative to the project source directory, or uses absolute path.
- */
+    /**
+     * Resolves a file path relative to the project source directory, or uses absolute path.
+     */
     private Path resolveFile(ProjectEntry entry, String filePath) {
         Path p = Path.of(filePath);
         if (p.isAbsolute()) return p;
