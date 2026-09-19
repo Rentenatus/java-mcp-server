@@ -36,8 +36,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 
-import spoon.reflect.declaration.CtField;
-import spoon.reflect.declaration.CtMethod;
 import spoon.reflect.declaration.CtType;
 
 /**
@@ -102,51 +100,14 @@ public class EditAnnotationTool extends BaseJavaTool {
             return error("targetName required for method and field annotations");
         }
 
-        // Determine the declaration line of the target member; the search window
-        // is resolved after reading the source so the annotation block above the
-        // declaration can be included (annotations sit above the declaration line).
-        int declLine = -1;
-        if ("method".equals(targetType) && targetName != null) {
-            CtMethod<?> method = type.getMethods().stream()
-                    .filter(m -> m.getSimpleName().equals(targetName))
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("Method '" + targetName + "' not found in " + className));
-            declLine = method.getPosition().getLine();
-        } else if ("field".equals(targetType) && targetName != null) {
-            CtField<?> field = type.getFields().stream()
-                    .filter(f -> f.getSimpleName().equals(targetName))
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("Field '" + targetName + "' not found in " + className));
-            declLine = field.getPosition().getLine();
-        } else if ("class".equals(targetType)) {
-            declLine = type.getPosition().getLine();
-        }
-
         String source = Files.readString(file);
-        String[] lines = source.split("\n", -1);
-        int searchStartLine;
-        int searchEndLine;
-        if (declLine > 0) {
-            searchStartLine = annotationSearchStart(lines, declLine);
-            searchEndLine = declLine;
-        } else {
-            searchStartLine = 1;
-            searchEndLine = Integer.MAX_VALUE;
-        }
+        int[] window = annotationWindow(source, type, targetType, targetName);
+        int startOffset = window[0];
+        int endOffset = window[1];
         String replacement = "@" + annotation;
         if (newAttributes != null && !newAttributes.isBlank()) {
             replacement += "(" + newAttributes + ")";
         }
-        // Calculate character offsets for the search window
-        int startOffset = 0;
-        for (int i = 0; i < searchStartLine - 1 && i < lines.length; i++) {
-            startOffset += lines[i].length() + 1;
-        }
-        int endOffset = startOffset;
-        for (int i = searchStartLine - 1; i < searchEndLine && i < lines.length; i++) {
-            endOffset += lines[i].length() + 1;
-        }
-        endOffset = Math.min(endOffset, source.length());
         String newSource = replaceAnnotationInWindow(source, startOffset, endOffset, annotation, replacement);
         if (newSource == null) {
             return error("Annotation '@" + annotation + "' not found on " + targetType

@@ -40,6 +40,8 @@ import java.util.Objects;
 import java.nio.file.Files;
 import com.softtek_jare.mcp.model.Fingerprint;
 import spoon.reflect.declaration.CtType;
+import spoon.reflect.declaration.CtMethod;
+import spoon.reflect.declaration.CtField;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -633,6 +635,62 @@ public abstract class BaseJavaTool implements McpTool {
         if (all.size() > 10) sb.append("> …and ").append(all.size() - 10).append(" more\n");
         sb.append("> Call `reload_java_project` to refresh the model.\n\n");
         return sb.toString();
+    }
+
+    // --- Shared annotation search-window helper (used by edit/remove annotation tools) ---
+
+    /**
+     * Computes the character offset range {@code [startOffset, endOffset)} for
+     * the annotation block preceding the declaration of the given target. The
+     * window includes the annotation block (which sits above the declaration)
+     * up to and including the declaration line itself.
+     *
+     * @param source     the full source text of the file
+     * @param type       the CtType containing the target
+     * @param targetType {@code "class"}, {@code "method"}, or {@code "field"}
+     * @param targetName method or field name (null for class)
+     * @return {@code int[]} of {@code [startOffset, endOffset]}, or {@code null}
+     *         if the declaration line cannot be determined
+     */
+    protected static int[] annotationWindow(String source, CtType<?> type,
+                                              String targetType, String targetName) {
+        int declLine = -1;
+        if ("method".equals(targetType) && targetName != null) {
+            CtMethod<?> method = type.getMethods().stream()
+                    .filter(m -> m.getSimpleName().equals(targetName))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Method '" + targetName + "' not found in " + type.getQualifiedName()));
+            declLine = method.getPosition().getLine();
+        } else if ("field".equals(targetType) && targetName != null) {
+            CtField<?> field = type.getFields().stream()
+                    .filter(f -> f.getSimpleName().equals(targetName))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Field '" + targetName + "' not found in " + type.getQualifiedName()));
+            declLine = field.getPosition().getLine();
+        } else if ("class".equals(targetType)) {
+            declLine = type.getPosition().getLine();
+        }
+        String[] lines = source.split("\n", -1);
+        int searchStartLine, searchEndLine;
+        if (declLine > 0) {
+            searchStartLine = annotationSearchStart(lines, declLine);
+            searchEndLine = declLine;
+        } else {
+            searchStartLine = 1;
+            searchEndLine = Integer.MAX_VALUE;
+        }
+        int startOffset = 0;
+        for (int i = 0; i < searchStartLine - 1 && i < lines.length; i++) {
+            startOffset += lines[i].length() + 1;
+        }
+        int endOffset = startOffset;
+        for (int i = searchStartLine - 1; i < searchEndLine && i < lines.length; i++) {
+            endOffset += lines[i].length() + 1;
+        }
+        endOffset = Math.min(endOffset, source.length());
+        return new int[]{startOffset, endOffset};
     }
 
     // --- Shared code-safe text replacement (used by rename/move tools) ---
