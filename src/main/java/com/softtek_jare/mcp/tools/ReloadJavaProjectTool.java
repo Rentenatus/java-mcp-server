@@ -57,7 +57,11 @@ public class ReloadJavaProjectTool extends BaseJavaTool {
             + "parameters as the original load. The expiry timer is reset on reload. "
             + "Note: New files created after the initial load are not visible in the model and cannot "
             + "be detected by scoped dirty checks. Only check_project_dirty performs a full scan. "
-            + "After reload, all new, changed, and deleted files are reflected in the model.";
+            + "After reload, all new, changed, and deleted files are reflected in the model. "
+            + "CAUTION: If the on-disk source is unparseable (e.g. a previous edit produced invalid "
+            + "Java), reload will FAIL because the parser cannot build a model. In that case, fix "
+            + "the source on disk first, or call reboot_spoon to discard all projects and re-load "
+            + "from scratch.";
     }
     @Override protected Map<String, Object> toolProperties() {
         return Map.of(

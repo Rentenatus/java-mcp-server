@@ -8,4 +8,6 @@ public interface Stone {
     boolean isEmpty();
     String getDisplayText();
     java.awt.Color getColor();
+    @Deprecated
+    String getMarker();
 }

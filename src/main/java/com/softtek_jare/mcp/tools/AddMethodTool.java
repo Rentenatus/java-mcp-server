@@ -41,6 +41,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import spoon.reflect.declaration.CtInterface;
 import spoon.reflect.declaration.CtType;
 
 /**
@@ -59,8 +60,11 @@ public class AddMethodTool extends BaseJavaTool {
 
     @Override protected String toolName() { return "add_method"; }
     @Override protected String toolDescription() {
-        return "Add a new method to an existing class. Checks for erasure collisions. "
-                + "Automatic import resolution applies to types in the body.";
+        return "Add a new method to an existing class or interface. Checks for erasure collisions. "
+                + "Automatic import resolution applies to types in the body. "
+                + "On an interface: with no body, emits an abstract method (semicolon); "
+                + "with a body, emits a 'default' method (Java 8+). On a class: with no body, "
+                + "emits an empty-bodied method; with a body, emits the full method.";
     }
     @Override protected Map<String, Object> toolProperties() {
         return Map.of(
@@ -129,11 +133,20 @@ public class AddMethodTool extends BaseJavaTool {
         // class body (4 spaces); the body is indented one level deeper than the
         // declaration, and the closing brace returns to the declaration indent.
         // The previous version left the body and closing brace at column 0.
+        // For interfaces without a body, emit an abstract method (semicolon, no braces).
+        boolean isInterface = targetType instanceof CtInterface;
+        boolean hasBody = body != null && !body.isBlank();
+        // If the target is an interface and no body is given, emit an abstract method.
+        // If a body IS given on an interface, emit a default method (Java 8+).
+        boolean abstractMethod = isInterface && !hasBody;
+        boolean defaultMethod = isInterface && hasBody;
         String memberIndent = "    ";
         String bodyIndent = "        ";
         StringBuilder methodSrc = new StringBuilder();
         methodSrc.append(memberIndent);
-        if (modifiers != null && !modifiers.isBlank()) {
+        if (defaultMethod) {
+            methodSrc.append("default ");
+        } else if (modifiers != null && !modifiers.isBlank()) {
             methodSrc.append(modifiers).append(" ");
         }
         methodSrc.append(returnType).append(" ").append(methodName).append("(");
@@ -141,7 +154,9 @@ public class AddMethodTool extends BaseJavaTool {
             methodSrc.append(parameters);
         }
         methodSrc.append(")");
-        if (body != null && !body.isBlank()) {
+        if (abstractMethod) {
+            methodSrc.append(";");
+        } else if (hasBody) {
             String[] bodyLines = body.stripIndent().split("\n", -1);
             methodSrc.append(" {\n");
             for (int i = 0; i < bodyLines.length; i++) {
@@ -151,6 +166,7 @@ public class AddMethodTool extends BaseJavaTool {
             }
             methodSrc.append("\n").append(memberIndent).append("}");
         } else {
+            // Non-interface (class/enum) with no body: emit empty body
             methodSrc.append(" {\n").append(memberIndent).append("}");
         }
 

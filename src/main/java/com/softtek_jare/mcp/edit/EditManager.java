@@ -277,4 +277,19 @@ public class EditManager {
     public int getPendingChangeCount() {
         return pendingChanges.size();
     }
+
+    /**
+     * Performs a hard reset of all transaction and edit state: discards any
+     * pending transaction, clears the edit log, and resets the backup
+     * tracking. Used by the reboot_spoon tool to recover from a corrupted
+     * state without restarting the JVM.
+     */
+    public void hardReset() {
+        inTransaction = false;
+        pendingChanges.clear();
+        editLog.clear();
+        backedUp.clear();
+        lastCommittedFiles = Set.of();
+        LOG.info("EditManager hard reset: all transactions, backups, and edit log cleared");
+    }
 }

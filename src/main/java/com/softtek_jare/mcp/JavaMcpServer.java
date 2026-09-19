@@ -133,6 +133,7 @@ public class JavaMcpServer {
                 new FindReferencesTool(projectManager).build(),
                 new CheckProjectDirtyTool(projectManager).build(),
                 new ReloadJavaProjectTool(projectManager).build(),
+                new RebootSpoonTool(projectManager, editManager).build(),
                 new EditLineTool(projectManager, editManager).build(),
                 new RenameSymbolTool(projectManager, editManager).build(),
                 new ReplaceMethodBodyTool(projectManager, editManager).build(),

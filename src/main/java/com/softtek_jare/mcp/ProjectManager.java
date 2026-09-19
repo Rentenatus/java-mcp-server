@@ -264,6 +264,30 @@ public class ProjectManager {
     }
 
 /**
+ * Removes and cleans up ALL loaded projects. Discards every in-memory model,
+ * launcher, and fingerprint. Used by the reboot_spoon tool to recover from
+ * parse errors or corrupted model state without restarting the JVM.
+ *
+ * @return the names of the projects that were removed
+ */
+    public List<String> removeAll() {
+        List<String> removed = new ArrayList<>();
+        for (var entry : new ArrayList<>(entries.values())) {
+            removed.add(entry.name());
+            projectLoader.cleanup(entry.projectDir());
+            if (entry.delomboked()) {
+                lombokDelomboker.cleanup(entry.projectDir());
+            }
+            if (editManager != null) {
+                editManager.resetBackup(entry.name());
+            }
+        }
+        entries.clear();
+        LOG.info("Reboot: removed {} project(s): {}", removed.size(), removed);
+        return removed;
+    }
+
+/**
  * Marks all projects whose expiry date has passed as expired (without deleting them).
  * Returns the names of newly expired projects for agent notification.
  */
@@ -317,13 +341,29 @@ public class ProjectManager {
         Launcher launcher;
         if (buildInfo.type() == BuildDetector.BuildType.MAVEN) {
             try {
-                launcher = new MavenLauncher(projectDir.toAbsolutePath().toString(), MavenLauncher.SOURCE_TYPE.APP_SOURCE);
-                launcher.getEnvironment().setCommentEnabled(true);
-                /* MavenLauncher resolves JDK classpath via ECJ bootclasspath detection;
-                   calling applyJdkClasspath here would break it (see P36). */
-                LOG.info("Using MavenLauncher for {} (NoClasspath={}, JDK via ECJ bootclasspath)",
-                        projectDir, launcher.getEnvironment().getNoClasspath());
-                return launcher;
+                // Resolve symlinks in the project path and in java.home before
+                // passing to MavenLauncher. On Windows (e.g. scoop-managed JDKs
+                // where JAVA_HOME is a 'current' symlink), MavenLauncher's
+                // system-library detection rejects symlinked paths with
+                // "invalid location for system libraries". Resolving to the
+                // real path avoids this.
+                Path realProjectDir = resolveRealPath(projectDir);
+                String realJavaHome = resolveRealJavaHome();
+                String savedJavaHome = realJavaHome != null
+                        ? setAndSaveJavaHome(realJavaHome) : null;
+                try {
+                    launcher = new MavenLauncher(realProjectDir.toAbsolutePath().toString(), MavenLauncher.SOURCE_TYPE.APP_SOURCE);
+                    launcher.getEnvironment().setCommentEnabled(true);
+                    /* MavenLauncher resolves JDK classpath via ECJ bootclasspath detection;
+                       calling applyJdkClasspath here would break it (see P36). */
+                    LOG.info("Using MavenLauncher for {} (NoClasspath={}, JDK via ECJ bootclasspath)",
+                            realProjectDir, launcher.getEnvironment().getNoClasspath());
+                    return launcher;
+                } finally {
+                    if (savedJavaHome != null) {
+                        System.setProperty("java.home", savedJavaHome);
+                    }
+                }
             } catch (Exception e) {
                 LOG.warn("MavenLauncher failed ({}), falling back to noclasspath", e.getMessage());
             }
@@ -421,6 +461,44 @@ public class ProjectManager {
         }
         LOG.info("resolveSourceRoot: fallback to projectDir -> {}", entry.projectDir());
         return entry.projectDir();
+    }
+
+/**
+ * Resolves a path to its real (non-symlink) form. Returns the original
+ * path if resolution fails (e.g. on filesystems that don't support links).
+ */
+    private static Path resolveRealPath(Path path) {
+        try {
+            return path.toRealPath();
+        } catch (IOException e) {
+            return path;
+        }
+    }
+
+/**
+ * Returns the real (non-symlink) java.home path, or null if it cannot be
+ * resolved. On Windows scoop JDKs, java.home is typically a 'current'
+ * symlink that MavenLauncher rejects.
+ */
+    private static String resolveRealJavaHome() {
+        String javaHome = System.getProperty("java.home", "");
+        if (javaHome.isEmpty()) return null;
+        try {
+            Path real = java.nio.file.Path.of(javaHome).toRealPath();
+            return real.toAbsolutePath().toString();
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+/**
+ * Temporarily sets java.home to the real path and returns the previous
+ * value so the caller can restore it in a finally block.
+ */
+    private static String setAndSaveJavaHome(String realJavaHome) {
+        String old = System.getProperty("java.home");
+        System.setProperty("java.home", realJavaHome);
+        return old;
     }
 
 /**
