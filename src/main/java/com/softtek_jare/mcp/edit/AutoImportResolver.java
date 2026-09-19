@@ -137,10 +137,14 @@ public class AutoImportResolver {
 
     private Set<String> extractTypeNames(String bodyText) {
         Set<String> names = new HashSet<>();
-        // Match capitalized identifiers that look like type names
+        // Match capitalized identifiers that look like type names, but only in
+        // code regions. String/char literals and comments are blanked out first
+        // so that words like "Failed" in throw new Exception("Failed") or
+        // "TODO" in a // TODO comment are not mistaken for unresolved types.
+        String codeOnly = blankNonCode(bodyText);
         java.util.regex.Pattern p = java.util.regex.Pattern.compile(
             "\\b([A-Z][a-zA-Z0-9_]*)\\b");
-        java.util.regex.Matcher m = p.matcher(bodyText);
+        java.util.regex.Matcher m = p.matcher(codeOnly);
         while (m.find()) {
             String name = m.group(1);
             // Skip ALL_CAPS constants like MAX_VALUE, DEFAULT_TIMEOUT.
@@ -151,6 +155,66 @@ public class AutoImportResolver {
             names.add(name);
         }
         return names;
+    }
+
+    /**
+     * Returns a copy of {@code text} with string literals, char literals,
+     * line comments ({@code //...}), and block comments ({@code /* ... *{@literal /})
+     * replaced by spaces, preserving length and line structure so that
+     * character offsets and word boundaries are unaffected. Used to scan only
+     * real code for type-name candidates.
+     */
+    private static String blankNonCode(String text) {
+        if (text == null) return null;
+        char[] out = text.toCharArray();
+        int i = 0, n = out.length;
+        while (i < n) {
+            char c = out[i];
+            // Line comment
+            if (c == '/' && i + 1 < n && out[i + 1] == '/') {
+                while (i < n && out[i] != '\n') { out[i] = ' '; i++; }
+                continue;
+            }
+            // Block comment
+            if (c == '/' && i + 1 < n && out[i + 1] == '*') {
+                out[i] = ' '; out[i + 1] = ' '; i += 2;
+                while (i < n) {
+                    if (out[i] == '*' && i + 1 < n && out[i + 1] == '/') {
+                        out[i] = ' '; out[i + 1] = ' '; i += 2;
+                        break;
+                    }
+                    if (out[i] != '\n') out[i] = ' ';
+                    i++;
+                }
+                continue;
+            }
+            // String literal
+            if (c == '"') {
+                out[i] = ' '; i++;
+                while (i < n) {
+                    char sc = out[i];
+                    if (sc == '\\' && i + 1 < n) { out[i] = ' '; out[i + 1] = ' '; i += 2; continue; }
+                    if (sc == '"') { out[i] = ' '; i++; break; }
+                    if (sc != '\n') out[i] = ' ';
+                    i++;
+                }
+                continue;
+            }
+            // Char literal
+            if (c == '\'') {
+                out[i] = ' '; i++;
+                while (i < n) {
+                    char cc = out[i];
+                    if (cc == '\\' && i + 1 < n) { out[i] = ' '; out[i + 1] = ' '; i += 2; continue; }
+                    if (cc == '\'') { out[i] = ' '; i++; break; }
+                    if (cc != '\n') out[i] = ' ';
+                    i++;
+                }
+                continue;
+            }
+            i++;
+        }
+        return new String(out);
     }
 
     private List<String> findInProject(ProjectEntry entry, String simpleName) {

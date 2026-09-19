@@ -115,6 +115,27 @@ class AutoImportResolverTest {
     }
 
     @Test
+    void capitalizedWordsInStringsAndCommentsAreIgnored() throws Exception {
+        Path src = tempDir.resolve("src");
+        Files.createDirectories(src);
+        Files.writeString(src.resolve("X.java"), "class X {}\n");
+
+        ProjectManager mgr = new ProjectManager();
+        ProjectEntry entry = mgr.load(src.toString(), null, null, true, true);
+        CtType<?> type = entry.model().getAllTypes().stream().findFirst().orElseThrow();
+
+        AutoImportResolver resolver = new AutoImportResolver();
+        // "Failed" is inside a string literal; "TODO" and "Review" are in comments.
+        // None of these are real types, so they must not be reported as unresolved.
+        var result = resolver.resolve(entry, type,
+                "throw new RuntimeException(\"Failed\"); // TODO: Review this");
+
+        assertTrue(result.unresolvedTypes().isEmpty(),
+                "string/comment words should not be resolved as types, got: " + result.unresolvedTypes());
+        mgr.remove(entry.name());
+    }
+
+    @Test
     void samePackageTypeNotAdded() throws Exception {
         Path src = tempDir.resolve("src");
         Files.createDirectories(src);
