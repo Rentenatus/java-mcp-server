@@ -132,8 +132,12 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
         }
 
         // Record body position before modifying AST
-        int bodyStartLine = target.getBody() != null ? target.getBody().getPosition().getLine() : -1;
-        int bodyEndLine = target.getBody() != null ? target.getBody().getPosition().getEndLine() : -1;
+        if (target.getBody() == null) {
+            return error("Method '" + methodName + "' has no body (abstract or interface method). "
+                    + "Cannot replace body of a method without one.");
+        }
+        int bodyStartLine = target.getBody().getPosition().getLine();
+        int bodyEndLine = target.getBody().getPosition().getEndLine();
 
         // Write file — text-based body replacement preserves formatting and comments
         Path file = targetType.getPosition().getFile() != null
