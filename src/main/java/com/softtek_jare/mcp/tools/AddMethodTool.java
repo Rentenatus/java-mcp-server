@@ -120,7 +120,7 @@ public class AddMethodTool extends BaseJavaTool {
         }
         var importResult = new AutoImportResolver().resolve(entry, targetType, importCheckText.toString());
         if (!importResult.unresolvedTypes().isEmpty()) {
-            return error("Cannot resolve type(s) in method body: " + importResult.unresolvedTypes()
+            return error("Cannot resolve type(s) in method signature or body: " + importResult.unresolvedTypes()
                     + ". Provide the fully qualified name or add the dependency.");
         }
 
