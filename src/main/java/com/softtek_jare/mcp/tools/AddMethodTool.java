@@ -118,14 +118,20 @@ public class AddMethodTool extends BaseJavaTool {
             return error(clash.message());
         }
 
-        // Auto-import resolution for body
-        var importResult = new com.softtek_jare.mcp.edit.AutoImportResolver.Result(java.util.List.of(), java.util.List.of());
+        // Auto-import resolution for return type, parameters, and body.
+        // All three can reference types that need imports — not just the body.
+        StringBuilder importCheckText = new StringBuilder();
+        importCheckText.append(returnType);
+        if (parameters != null && !parameters.isBlank()) {
+            importCheckText.append(' ').append(parameters);
+        }
         if (body != null && !body.isBlank()) {
-            importResult = new AutoImportResolver().resolve(entry, targetType, body);
-            if (!importResult.unresolvedTypes().isEmpty()) {
-                return error("Cannot resolve type(s) in method body: " + importResult.unresolvedTypes()
-                        + ". Provide the fully qualified name or add the dependency.");
-            }
+            importCheckText.append(' ').append(body);
+        }
+        var importResult = new AutoImportResolver().resolve(entry, targetType, importCheckText.toString());
+        if (!importResult.unresolvedTypes().isEmpty()) {
+            return error("Cannot resolve type(s) in method body: " + importResult.unresolvedTypes()
+                    + ". Provide the fully qualified name or add the dependency.");
         }
 
         // Build method source string
@@ -156,9 +162,7 @@ public class AddMethodTool extends BaseJavaTool {
         String newContent = source.substring(0, lastBrace)
                 + "    " + methodSrc + "\n"
                 + source.substring(lastBrace);
-        if (body != null && !body.isBlank()) {
-            newContent = insertImports(newContent, importResult.importsToAdd());
-        }
+        newContent = insertImports(newContent, importResult.importsToAdd());
 
         entry = editManager.writeFile(entry, file, newContent, null);
         manager.updateEntry(entry);
