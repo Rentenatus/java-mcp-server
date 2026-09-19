@@ -109,9 +109,7 @@ public class AddAnnotationTool extends BaseJavaTool {
             if (alreadyHas) return error("Class '" + className + "' already has annotation @" + annotation + ".");
             int declLine = type.getPosition().getLine();
             if (declLine < 1) return error("Cannot determine class declaration line.");
-            insertLine = declLine - 1;
-            // Walk backwards to skip blank lines above the declaration
-            while (insertLine > 0 && lines[insertLine].trim().isEmpty()) insertLine--;
+            insertLine = declLine - 1; // 0-indexed declaration line; annotation inserted right before it
         } else if ("method".equals(targetType)) {
             if (targetName == null) return error("targetName required for method annotations.");
             CtMethod<?> method = type.getMethods().stream()
@@ -124,9 +122,7 @@ public class AddAnnotationTool extends BaseJavaTool {
             if (alreadyHas) return error("Method '" + targetName + "' already has annotation @" + annotation + ".");
             int declLine = method.getPosition().getLine();
             if (declLine < 1) return error("Cannot determine method declaration line.");
-            insertLine = declLine - 1;
-            // Walk backwards to skip blank lines above the declaration
-            while (insertLine > 0 && lines[insertLine].trim().isEmpty()) insertLine--;
+            insertLine = declLine - 1; // 0-indexed declaration line; annotation inserted right before it
         } else if ("field".equals(targetType)) {
             if (targetName == null) return error("targetName required for field annotations.");
             CtField<?> field = type.getFields().stream()
@@ -139,9 +135,7 @@ public class AddAnnotationTool extends BaseJavaTool {
             if (alreadyHas) return error("Field '" + targetName + "' already has annotation @" + annotation + ".");
             int declLine = field.getPosition().getLine();
             if (declLine < 1) return error("Cannot determine field declaration line.");
-            insertLine = declLine - 1;
-            // Walk backwards to skip blank lines above the declaration
-            while (insertLine > 0 && lines[insertLine].trim().isEmpty()) insertLine--;
+            insertLine = declLine - 1; // 0-indexed declaration line; annotation inserted right before it
         } else {
             return error("targetType must be 'class', 'method', or 'field'");
         }
