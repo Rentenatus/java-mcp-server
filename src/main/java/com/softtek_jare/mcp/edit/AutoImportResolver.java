@@ -84,11 +84,16 @@ public class AutoImportResolver {
             if (targetClass != null && targetClass.getSimpleName().equals(simpleName)) continue;
 
             // Search project types for a match
-            String qualified = findInProject(entry, simpleName);
-            if (qualified != null) {
-                importsToAdd.add(qualified);
-            } else {
+            List<String> matches = findInProject(entry, simpleName);
+            if (matches.isEmpty()) {
                 unresolved.add(simpleName);
+            } else if (matches.size() == 1) {
+                importsToAdd.add(matches.get(0));
+            } else {
+                // Ambiguous: multiple types with the same simple name in different
+                // packages. Report as unresolved with the candidates so the user
+                // can pick the fully qualified name.
+                unresolved.add(simpleName + " (ambiguous: " + String.join(" | ", matches) + ")");
             }
         }
 
@@ -148,13 +153,14 @@ public class AutoImportResolver {
         return names;
     }
 
-    private String findInProject(ProjectEntry entry, String simpleName) {
-        if (entry.model() == null) return null;
+    private List<String> findInProject(ProjectEntry entry, String simpleName) {
+        List<String> matches = new ArrayList<>();
+        if (entry.model() == null) return matches;
         for (CtType<?> t : entry.model().getAllTypes()) {
             if (t.getSimpleName().equals(simpleName)) {
-                return t.getQualifiedName();
+                matches.add(t.getQualifiedName());
             }
         }
-        return null;
+        return matches;
     }
 }
