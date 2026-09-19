@@ -134,8 +134,14 @@ public class AddMethodTool extends BaseJavaTool {
                     + ". Provide the fully qualified name or add the dependency.");
         }
 
-        // Build method source string
+        // Build method source string. Members live one indent level inside the
+        // class body (4 spaces); the body is indented one level deeper than the
+        // declaration, and the closing brace returns to the declaration indent.
+        // The previous version left the body and closing brace at column 0.
+        String memberIndent = "    ";
+        String bodyIndent = "        ";
         StringBuilder methodSrc = new StringBuilder();
+        methodSrc.append(memberIndent);
         if (modifiers != null && !modifiers.isBlank()) {
             methodSrc.append(modifiers).append(" ");
         }
@@ -145,9 +151,16 @@ public class AddMethodTool extends BaseJavaTool {
         }
         methodSrc.append(")");
         if (body != null && !body.isBlank()) {
-            methodSrc.append(" {\n").append(body).append("\n}");
+            String[] bodyLines = body.stripIndent().split("\n", -1);
+            methodSrc.append(" {\n");
+            for (int i = 0; i < bodyLines.length; i++) {
+                if (!bodyLines[i].isBlank()) methodSrc.append(bodyIndent);
+                methodSrc.append(bodyLines[i]);
+                if (i < bodyLines.length - 1) methodSrc.append("\n");
+            }
+            methodSrc.append("\n").append(memberIndent).append("}");
         } else {
-            methodSrc.append(" {\n}");
+            methodSrc.append(" {\n").append(memberIndent).append("}");
         }
 
         // Insert before last closing brace of the class
@@ -160,7 +173,7 @@ public class AddMethodTool extends BaseJavaTool {
         if (lastBrace < 0) return error("Malformed source: no closing brace found.");
 
         String newContent = source.substring(0, lastBrace)
-                + "    " + methodSrc + "\n"
+                + methodSrc + "\n"
                 + source.substring(lastBrace);
         newContent = insertImports(newContent, importResult.importsToAdd());
 

@@ -78,8 +78,14 @@ class AddMethodAddFieldTest {
                 entry.name(), "Box", "getValue", "int", null, "public", "return 42;"));
 
         assertFalse(result.isError());
-        assertTrue(Files.readString(file).contains("getValue"));
-        assertTrue(Files.readString(file).contains("return 42"));
+        String written = Files.readString(file);
+        assertTrue(written.contains("getValue"));
+        assertTrue(written.contains("return 42"));
+        // The body and closing brace must be indented, not at column 0.
+        assertTrue(written.lines().anyMatch(l -> l.equals("        return 42;")),
+                "body line should be indented 8 spaces, got:\n" + written);
+        assertTrue(written.lines().anyMatch(l -> l.trim().equals("}") && l.startsWith("    ")),
+                "method closing brace should be indented 4 spaces, got:\n" + written);
         mgr.remove(entry.name());
     }
 
