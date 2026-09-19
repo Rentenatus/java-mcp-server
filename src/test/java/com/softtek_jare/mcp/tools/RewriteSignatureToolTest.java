@@ -128,6 +128,37 @@ class RewriteSignatureToolTest {
         mgr.remove(entry.name());
     }
 
+    @Test
+    void selfCallInDeclaringClassGetsTodoMarker() throws Exception {
+        Path calc = srcDir.resolve("Calc.java");
+        Files.writeString(calc, """
+            class Calc {
+                int add(int a, int b) {
+                    return a + b;
+                }
+                int rec() {
+                    return add(1, 2);
+                }
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = tool.handle(null, req(
+                entry.name(), "Calc", "add", "int", "int a, int b, int c", "signature_and_callers"));
+
+        assertFalse(result.isError());
+        String written = Files.readString(calc);
+        // The self-call in rec() must be flagged, but the declaration line must
+        // not be corrupted with a TODO marker.
+        assertTrue(written.contains("TODO"),
+                "self-call in declaring class should get a TODO marker, got:\n" + written);
+        long declOccurrences = written.lines()
+                .filter(l -> l.contains("int add(int a, int b, int c)"))
+                .count();
+        assertTrue(declOccurrences == 1, "declaration must remain intact, got:\n" + written);
+        mgr.remove(entry.name());
+    }
+
     private static CallToolRequest req(String name, String className, String methodName,
             String newReturnType, String newParameters, String mode) {
         Map<String, Object> args = new HashMap<>();

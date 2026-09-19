@@ -300,15 +300,13 @@ public class RewriteSignatureTool extends BaseJavaTool {
                 }
             }
         }
-        // Insert TODO comments at the exact call-site lines
+        // Insert TODO comments at the exact call-site lines. Call sites are
+        // genuine invocations, so the declaration line is never among them;
+        // we only guard against a self-call reported on the declaration line.
         int count = 0;
-        java.nio.file.Path declaringFile = target.getPosition().getFile() != null
-                ? target.getPosition().getFile().toPath() : null;
+        int declLine = target.getPosition().getLine();
         for (var fileEntry : callSites.entrySet()) {
             java.nio.file.Path file = fileEntry.getKey();
-            // Skip the declaring file: the signature was already rewritten above,
-            // and inserting a TODO before the declaration line would corrupt it.
-            if (declaringFile != null && file.equals(declaringFile)) continue;
             java.util.Set<Integer> lineNumbers = fileEntry.getValue();
             try {
                 String source = java.nio.file.Files.readString(file);
@@ -317,7 +315,7 @@ public class RewriteSignatureTool extends BaseJavaTool {
                 int localCount = 0;
                 for (int i = 0; i < lines.length; i++) {
                     int lineNum = i + 1; // 1-indexed
-                    if (lineNumbers.contains(lineNum)) {
+                    if (lineNumbers.contains(lineNum) && lineNum != declLine) {
                         newSource.append("// TODO: signature of ").append(methodName)
                                 .append(" changed — review arguments\n");
                         localCount++;
