@@ -32,7 +32,6 @@ import java.util.List;
 import java.util.Set;
 
 import spoon.reflect.declaration.CtType;
-import spoon.reflect.reference.CtTypeReference;
 
 /**
  * Resolves type references in a method body against the project's loaded AST
