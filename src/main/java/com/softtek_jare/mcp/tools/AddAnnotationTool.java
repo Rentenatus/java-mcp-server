@@ -110,7 +110,7 @@ public class AddAnnotationTool extends BaseJavaTool {
             int declLine = type.getPosition().getLine();
             if (declLine < 1) return error("Cannot determine class declaration line.");
             insertLine = declLine - 1;
-            // Walk backwards to skip modifiers (public, final, abstract, etc.)
+            // Walk backwards to skip blank lines above the declaration
             while (insertLine > 0 && lines[insertLine].trim().isEmpty()) insertLine--;
         } else if ("method".equals(targetType)) {
             if (targetName == null) return error("targetName required for method annotations.");
@@ -125,7 +125,7 @@ public class AddAnnotationTool extends BaseJavaTool {
             int declLine = method.getPosition().getLine();
             if (declLine < 1) return error("Cannot determine method declaration line.");
             insertLine = declLine - 1;
-            // Walk backwards to skip modifiers
+            // Walk backwards to skip blank lines above the declaration
             while (insertLine > 0 && lines[insertLine].trim().isEmpty()) insertLine--;
         } else if ("field".equals(targetType)) {
             if (targetName == null) return error("targetName required for field annotations.");
@@ -140,7 +140,7 @@ public class AddAnnotationTool extends BaseJavaTool {
             int declLine = field.getPosition().getLine();
             if (declLine < 1) return error("Cannot determine field declaration line.");
             insertLine = declLine - 1;
-            // Walk backwards to skip modifiers
+            // Walk backwards to skip blank lines above the declaration
             while (insertLine > 0 && lines[insertLine].trim().isEmpty()) insertLine--;
         } else {
             return error("targetType must be 'class', 'method', or 'field'");
