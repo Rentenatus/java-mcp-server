@@ -107,8 +107,12 @@ public class MoveClassTool extends BaseJavaTool {
         manager.updateEntry(entry);
         editManager.logEdit(toolName());
 
-        // Delete old file
-        Files.delete(oldFile);
+        // Delete old file — only when NOT in a transaction. During a
+        // transaction the new file is only buffered in memory; deleting the
+        // old file now would lose data if the transaction is rolled back.
+        if (!editManager.isInTransaction()) {
+            Files.delete(oldFile);
+        }
         manager.markDirty(name);
 
         // Update imports in all loaded source files
@@ -128,7 +132,7 @@ public class MoveClassTool extends BaseJavaTool {
                 if (!updatedContent.equals(content)) {
                     entry = editManager.writeFile(entry, file, updatedContent, null);
                     manager.updateEntry(entry);
-        editManager.logEdit(toolName());
+                    editManager.logEdit(toolName());
                     importsUpdated++;
                 }
             }
@@ -137,6 +141,10 @@ public class MoveClassTool extends BaseJavaTool {
         StringBuilder sb = new StringBuilder();
         sb.append("Moved: ").append(className).append(" -> ").append(newQualified).append("\n");
         sb.append("Imports updated: ").append(importsUpdated).append("\n");
+        if (editManager.isInTransaction()) {
+            sb.append("NOTE: old file not deleted yet (transaction active). ");
+            sb.append("Delete '").append(oldFile.getFileName()).append("' after commit_transaction.\n");
+        }
         sb.append(formatMultiModuleWarning(entry));
         return ok(sb);
     }
