@@ -12,12 +12,15 @@ public abstract class AbstractStone implements Stone {
         this.color = color;
         this.empty = empty;
     }
+    @Override
     public char getSymbol() {
         return symbol;
     }
+    @Override
     public boolean isEmpty() {
         return empty;
     }
+    @Override
     public java.awt.Color getColor() {
         return color;
     }

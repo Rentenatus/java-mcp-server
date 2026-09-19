@@ -118,17 +118,15 @@ public class RewriteSignatureTool extends BaseJavaTool {
         if (file == null) return error("Cannot determine source file.");
 
         String source = LineEndings.readNormalized(file);
-        // Find the method declaration by locating the declaration line from the
-        // AST and matching the signature there. The previous approach built an
-        // exact string from erased simple names (strips generics like
-        // List<String>) and used replaceFirst on the whole file, which could
-        // match the same pattern inside a comment. We now scope the search to
-        // the declaration line(s) and use a token-based match tolerant of
-        // generic brackets. Returns null when the declaration could not be
-        // found at all; the returned source may be unchanged when the
-        // signature already matches (e.g. user re-applies generics that
-        // Spoon erased to a simple name).
-        int declLine = target.getPosition().getLine();
+        // P47: use fresh-parse declaration line to avoid stale positions after prior edits
+        CtType<?> freshType = locateFreshType(file, className);
+        CtMethod<?> freshMethod = null;
+        if (freshType != null) {
+            freshMethod = freshType.getMethods().stream()
+                    .filter(m -> m.getSimpleName().equals(methodName))
+                    .findFirst().orElse(null);
+        }
+        int declLine = (freshMethod != null) ? freshMethod.getPosition().getLine() : target.getPosition().getLine();
         String oldDecl = target.getType().getSimpleName() + " " + methodName + "(" + getParamString(target) + ")";
         String newDecl = retType + " " + methodName + "(" + params + ")";
         String newSource = replaceSignatureOnLine(source, methodName, oldDecl, newDecl, declLine);
@@ -140,7 +138,7 @@ public class RewriteSignatureTool extends BaseJavaTool {
         if (signatureChanged) {
             entry = editManager.writeFile(entry, file, newSource, null);
             manager.updateEntry(entry);
-            editManager.logEdit(toolName());
+            editManager.logEdit(toolName() + ": " + className + "." + methodName + " -> " + retType + " " + methodName + "(" + params + ")");
         }
 
         int callersUpdated = 0;
@@ -316,7 +314,7 @@ public class RewriteSignatureTool extends BaseJavaTool {
                 if (localCount > 0) {
                     entry = editManager.writeFile(entry, file, newSource.toString(), null);
                     manager.updateEntry(entry);
-                    editManager.logEdit(toolName());
+                    editManager.logEdit(toolName() + ": updated callers of " + targetType.getQualifiedName() + "." + methodName + " in " + file.getFileName());
                 }
                 count += localCount;
             } catch (java.io.IOException e) {

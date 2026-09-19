@@ -166,7 +166,7 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
         newContent = insertImports(newContent, importResult.importsToAdd());
         entry = editManager.writeFile(entry, file, newContent, null);
         manager.updateEntry(entry);
-        editManager.logEdit(toolName());
+        editManager.logEdit(toolName() + ": " + className + "." + methodName);
 
         StringBuilder sb = new StringBuilder();
         sb.append("Method body replaced: ").append(className).append(".").append(methodName).append("\n");
@@ -177,41 +177,7 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
         return ok(sb);
     }
 
-    /**
-     * Re-parses the current on-disk file in a fresh noclasspath launcher and
-     * returns the method matching {@code methodName}/{@code signature}. This
-     * yields body positions that reflect any edits made since the project model
-     * was loaded, avoiding the stale-line-number corruption described in P37.
-     * Returns {@code null} if the method cannot be located (caller falls back to
-     * the loaded model's method).
-     */
-    private CtMethod<?> locateFreshMethod(Path file, String className, String methodName, String signature) {
-        try {
-            Launcher fresh = new Launcher();
-            fresh.addInputResource(file.toAbsolutePath().toString());
-            fresh.getEnvironment().setNoClasspath(true);
-            fresh.getEnvironment().setCommentEnabled(true);
-            fresh.getEnvironment().setAutoImports(false);
-            fresh.buildModel();
-            CtType<?> t = fresh.getModel().getAllTypes().stream()
-                    .filter(x -> x.getQualifiedName().equals(className))
-                    .findFirst().orElse(null);
-            if (t == null) return null;
-            java.util.List<CtMethod<?>> cands = t.getMethods().stream()
-                    .filter(m -> m.getSimpleName().equals(methodName))
-                    .collect(Collectors.toList());
-            if (signature == null || signature.isBlank()) {
-                return cands.size() == 1 ? cands.get(0) : null;
-            }
-            List<String> sigParams = parseSignature(signature);
-            for (CtMethod<?> m : cands) {
-                if (paramsMatch(m, sigParams)) return m;
-            }
-            return null;
-        } catch (Exception e) {
-            return null;
-        }
-    }
+    // locateFreshMethod is now shared in BaseJavaTool (P41).
 
     private List<String> parseSignature(String sig) {
         return splitTopLevelCommas(sig);

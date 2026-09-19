@@ -14,11 +14,11 @@ import java.awt.event.MouseEvent;
 
 public class TicTacToe extends JFrame {
     private JLabel[][] cells = new JLabel[3][3];
-    private JLabel statusLabel = new JLabel("Player X's turn");
+    private JLabel statusLabel = new JLabel("Tic-Tac-Toe — Player X starts. X:0 O:0 D:0");
     private Stone currentPlayer = new XStone();
 
     public TicTacToe() {
-        setTitle("Tic-Tac-Toe Game");
+        setTitle("Tic-Tac-Toe — X vs O");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         initUI();
         pack();
@@ -58,18 +58,28 @@ public class TicTacToe extends JFrame {
     }
 
     private void onCellClick(int row, int col) {
+        if (gameOver) {
+            resetBoard();
+            return;
+        }
         if (!stones[row][col].isEmpty()) {
             return;
         }
         placeMark(row, col);
         if (checkWin()) {
-            statusLabel.setText("Player " + currentPlayer.getSymbol() + " wins!");
+            if (currentPlayer.getSymbol() == 'X') {
+                xWins++;
+            } else {
+                oWins++;
+            }
+            gameOver = true;
+            statusLabel.setText("Player " + currentPlayer.getSymbol() + " wins! Click to play again. X:" + xWins + " O:" + oWins + " D:" + draws);
             setTitle("Player " + currentPlayer.getSymbol() + " wins!");
-            resetBoard();
         } else if (isBoardFull()) {
-            statusLabel.setText("Draw! Click to play again.");
+            draws++;
+            gameOver = true;
+            statusLabel.setText("Draw! Click to play again. X:" + xWins + " O:" + oWins + " D:" + draws);
             setTitle("Tic-Tac-Toe Game - Draw");
-            resetBoard();
         } else {
             currentPlayer = (currentPlayer.getSymbol() == 'X') ? new OStone() : new XStone();
             statusLabel.setText("Player " + currentPlayer.getSymbol() + "'s turn");
@@ -103,7 +113,8 @@ public class TicTacToe extends JFrame {
             }
         }
         currentPlayer = new XStone();
-        statusLabel.setText("Player X's turn");
+        gameOver = false;
+        statusLabel.setText("Player X's turn. X:" + xWins + " O:" + oWins + " D:" + draws);
         setTitle("Tic-Tac-Toe Game");
     }
 
@@ -118,9 +129,20 @@ public class TicTacToe extends JFrame {
         return true;
     }
 
+    public void newGame() {
+        resetBoard();
+    }
+
     public static void main(String[] args) {
         java.awt.EventQueue.invokeLater(TicTacToe::new);
     }
 
     private Stone[][] stones = new Stone[3][3];
+    private int xWins = 0;
+    private int oWins = 0;
+    private int draws = 0;
+    private boolean gameOver = false;
+    public String getScore() {
+        return "X:" + xWins + " O:" + oWins + " D:" + draws;
+    }
 }

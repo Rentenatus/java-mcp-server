@@ -95,7 +95,10 @@ public class RemoveAnnotationTool extends BaseJavaTool {
         if (targetErr != null) return error(targetErr);
 
         String source = LineEndings.readNormalized(file);
-        int[] window = annotationWindow(source, type, targetType, targetName);
+        // P46: use fresh-parse positions to avoid stale annotation window after prior edits
+        CtType<?> freshType = locateFreshType(file, className);
+        CtType<?> posType = (freshType != null) ? freshType : type;
+        int[] window = annotationWindow(source, posType, targetType, targetName);
         int startOffset = window[0];
         int endOffset = window[1];
         String newSource = replaceAnnotationInWindow(source, startOffset, endOffset, annotation, "");
@@ -120,7 +123,7 @@ public class RemoveAnnotationTool extends BaseJavaTool {
         }
         entry = editManager.writeFile(entry, file, newSource, null);
         manager.updateEntry(entry);
-        editManager.logEdit(toolName());
+        editManager.logEdit(toolName() + ": @" + annotation + " from " + targetType + (targetName != null ? " " + targetName : "") + " in " + className);
 
         return ok("Annotation removed: @" + annotation + " from " + targetType
                 + (targetName != null ? " " + targetName : "") + "\n" + formatMultiModuleWarning(entry));

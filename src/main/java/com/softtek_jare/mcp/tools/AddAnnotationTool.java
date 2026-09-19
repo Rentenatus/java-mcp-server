@@ -103,12 +103,16 @@ public class AddAnnotationTool extends BaseJavaTool {
         String[] lines = source.split("\n", -1);
         int insertLine; // 0-indexed line before which to insert the annotation
 
+        // P44: use fresh-parse positions to avoid stale declaration lines after prior edits
+        CtType<?> freshType = locateFreshType(file, className);
+        CtType<?> posType = (freshType != null) ? freshType : type;
+
         if ("class".equals(targetType)) {
             // Duplicate check
             boolean alreadyHas = type.getAnnotations().stream()
                     .anyMatch(a -> annotationMatches(a.getAnnotationType().getQualifiedName(), annotation));
             if (alreadyHas) return error("Class '" + className + "' already has annotation @" + annotation + ".");
-            int declLine = type.getPosition().getLine();
+            int declLine = posType.getPosition().getLine();
             if (declLine < 1) return error("Cannot determine class declaration line.");
             insertLine = declLine - 1; // 0-indexed declaration line; annotation inserted right before it
         } else if ("method".equals(targetType)) {
@@ -121,7 +125,18 @@ public class AddAnnotationTool extends BaseJavaTool {
             boolean alreadyHas = method.getAnnotations().stream()
                     .anyMatch(a -> annotationMatches(a.getAnnotationType().getQualifiedName(), annotation));
             if (alreadyHas) return error("Method '" + targetName + "' already has annotation @" + annotation + ".");
-            int declLine = method.getPosition().getLine();
+            // P50: error on overloaded methods
+            long methodCount = type.getMethods().stream()
+                    .filter(m -> m.getSimpleName().equals(targetName)).count();
+            if (methodCount > 1) {
+                return error("Multiple methods named '" + targetName + "' in " + className
+                        + ". Annotation tools do not yet support overloaded methods.");
+            }
+            // P44: use fresh positions for insertion line
+            CtMethod<?> freshMethod = posType.getMethods().stream()
+                    .filter(m -> m.getSimpleName().equals(targetName))
+                    .findFirst().orElse(null);
+            int declLine = (freshMethod != null) ? freshMethod.getPosition().getLine() : method.getPosition().getLine();
             if (declLine < 1) return error("Cannot determine method declaration line.");
             insertLine = declLine - 1; // 0-indexed declaration line; annotation inserted right before it
         } else if ("field".equals(targetType)) {
@@ -134,7 +149,11 @@ public class AddAnnotationTool extends BaseJavaTool {
             boolean alreadyHas = field.getAnnotations().stream()
                     .anyMatch(a -> annotationMatches(a.getAnnotationType().getQualifiedName(), annotation));
             if (alreadyHas) return error("Field '" + targetName + "' already has annotation @" + annotation + ".");
-            int declLine = field.getPosition().getLine();
+            // P44: use fresh positions for insertion line
+            CtField<?> freshField = posType.getFields().stream()
+                    .filter(f -> f.getSimpleName().equals(targetName))
+                    .findFirst().orElse(null);
+            int declLine = (freshField != null) ? freshField.getPosition().getLine() : field.getPosition().getLine();
             if (declLine < 1) return error("Cannot determine field declaration line.");
             insertLine = declLine - 1; // 0-indexed declaration line; annotation inserted right before it
         } else {
@@ -155,7 +174,7 @@ public class AddAnnotationTool extends BaseJavaTool {
 
         entry = editManager.writeFile(entry, file, newSource, null);
         manager.updateEntry(entry);
-        editManager.logEdit(toolName());
+        editManager.logEdit(toolName() + ": @" + annotation + " on " + targetType + (targetName != null ? " " + targetName : "") + " in " + className);
 
         StringBuilder sb = new StringBuilder();
         sb.append("Annotation added: @").append(annotation).append(" on ").append(targetType);

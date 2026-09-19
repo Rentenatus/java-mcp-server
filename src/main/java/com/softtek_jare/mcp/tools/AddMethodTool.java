@@ -176,7 +176,10 @@ public class AddMethodTool extends BaseJavaTool {
         if (file == null) return error("Cannot determine source file.");
 
         String source = LineEndings.readNormalized(file);
-        int lastBrace = findClassClosingBrace(source, targetType.getPosition().getEndLine());
+        // P42: use fresh-parse endLine to avoid stale positions after prior edits
+        CtType<?> freshType = locateFreshType(file, className);
+        int endLine = (freshType != null) ? freshType.getPosition().getEndLine() : targetType.getPosition().getEndLine();
+        int lastBrace = findClassClosingBrace(source, endLine);
         if (lastBrace < 0) return error("Malformed source: no closing brace found.");
 
         String newContent = source.substring(0, lastBrace)
@@ -186,7 +189,7 @@ public class AddMethodTool extends BaseJavaTool {
 
         entry = editManager.writeFile(entry, file, newContent, null);
         manager.updateEntry(entry);
-        editManager.logEdit(toolName());
+        editManager.logEdit(toolName() + ": " + className + "." + methodName + "(" + (parameters == null ? "" : parameters) + ")");
 
         StringBuilder sb = new StringBuilder();
         sb.append("Method added: ").append(className).append(".").append(methodName).append("\n");

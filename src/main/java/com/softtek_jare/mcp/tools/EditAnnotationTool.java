@@ -98,7 +98,10 @@ public class EditAnnotationTool extends BaseJavaTool {
         if (targetErr != null) return error(targetErr);
 
         String source = LineEndings.readNormalized(file);
-        int[] window = annotationWindow(source, type, targetType, targetName);
+        // P46: use fresh-parse positions to avoid stale annotation window after prior edits
+        CtType<?> freshType = locateFreshType(file, className);
+        CtType<?> posType = (freshType != null) ? freshType : type;
+        int[] window = annotationWindow(source, posType, targetType, targetName);
         int startOffset = window[0];
         int endOffset = window[1];
         String replacement = "@" + annotation;
@@ -112,7 +115,7 @@ public class EditAnnotationTool extends BaseJavaTool {
         }
         entry = editManager.writeFile(entry, file, newSource, null);
         manager.updateEntry(entry);
-        editManager.logEdit(toolName());
+        editManager.logEdit(toolName() + ": @" + annotation + " attributes=[" + newAttributes + "] on " + targetType + (targetName != null ? " " + targetName : "") + " in " + className);
 
         return ok("Annotation edited: @" + annotation + " -> " + replacement + "\n"
                 + formatMultiModuleWarning(entry));

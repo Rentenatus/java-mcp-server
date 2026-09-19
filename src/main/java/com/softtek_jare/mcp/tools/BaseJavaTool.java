@@ -219,8 +219,17 @@ public abstract class BaseJavaTool implements McpTool {
  */
     protected static String insertImports(String source, List<String> importsToAdd) {
         if (importsToAdd == null || importsToAdd.isEmpty()) return source;
-        StringBuilder importBlock = new StringBuilder();
+        // P51: deduplicate — skip imports already present in the source
+        List<String> filtered = new ArrayList<>();
         for (String fqn : importsToAdd) {
+            String importLine = "import " + fqn + ";";
+            if (!source.contains(importLine)) {
+                filtered.add(fqn);
+            }
+        }
+        if (filtered.isEmpty()) return source;
+        StringBuilder importBlock = new StringBuilder();
+        for (String fqn : filtered) {
             importBlock.append("import ").append(fqn).append(";\n");
         }
         // Find insertion point: after package declaration and existing imports, before first type
@@ -535,23 +544,68 @@ public abstract class BaseJavaTool implements McpTool {
 
     /**
      * Finds the offset of the class closing brace by searching for the last
-     * {@code '}'} on or before the class end line (1-indexed). This avoids
-     * matching a {@code '}'} that appears in a trailing comment after the
-     * class body, which {@code source.lastIndexOf('}')} would incorrectly
-     * return.
+     * top-level {@code '}'} in the source. Scans backward from the end of the
+     * file, skipping {@code '}'} characters inside comments and string/char
+     * literals (P49). The classEndLine hint from the model is used as a
+     * starting hint but the comment-aware scan from the end is the
+     * authoritative source, making this robust against stale positions (P41).
      */
     protected static int findClassClosingBrace(String source, int classEndLine) {
-        int lineStart = 0;
-        for (int i = 1; i < classEndLine && lineStart < source.length(); i++) {
-            int nl = source.indexOf('\n', lineStart);
-            if (nl < 0) { lineStart = source.length(); break; }
-            lineStart = nl + 1;
+        // P49: scan backward from end, skip } in comments/strings
+        int i = source.length() - 1;
+        boolean inBlock = false;
+        while (i >= 0) {
+            char c = source.charAt(i);
+            // Check for block comment end */ (scanning backward, we see */ before /*)
+            if (inBlock) {
+                if (c == '*' && i > 0 && source.charAt(i - 1) == '/') { inBlock = false; i -= 2; continue; }
+                i--; continue;
+            }
+            // Check for block comment start (from backward perspective: */ ... /*)
+            if (c == '/' && i > 0 && source.charAt(i - 1) == '*') { inBlock = true; i -= 2; continue; }
+            // Check for line comment // — skip to beginning of line
+            if (c == '/' && i > 0 && source.charAt(i - 1) == '/') {
+                int nl = source.lastIndexOf('\n', i);
+                i = (nl < 0) ? -1 : nl;
+                continue;
+            }
+            // Skip string/char literals (scan backward to find the opening quote)
+            if (c == '"') {
+                i = skipStringBackward(source, i);
+                continue;
+            }
+            if (c == '\'') {
+                i = skipCharBackward(source, i);
+                continue;
+            }
+            if (c == '}') return i;
+            i--;
         }
-        int nextNl = source.indexOf('\n', lineStart);
-        int lineEnd = nextNl < 0 ? source.length() : nextNl;
-        int lastBrace = source.lastIndexOf('}', lineEnd > 0 ? lineEnd - 1 : 0);
-        if (lastBrace >= lineStart) return lastBrace;
-        return source.lastIndexOf('}'); // fallback
+        return -1;
+    }
+
+    /** Scans backward from a closing '"' to just before the opening '"'. */
+    private static int skipStringBackward(String s, int close) {
+        int i = close - 1;
+        while (i >= 0) {
+            char c = s.charAt(i);
+            if (c == '\\') { i--; continue; } // escaped char
+            if (c == '"') return i - 1;
+            i--;
+        }
+        return -1;
+    }
+
+    /** Scans backward from a closing '\'' to just before the opening '\''. */
+    private static int skipCharBackward(String s, int close) {
+        int i = close - 1;
+        while (i >= 0) {
+            char c = s.charAt(i);
+            if (c == '\\') { i--; continue; }
+            if (c == '\'') return i - 1;
+            i--;
+        }
+        return -1;
     }
 
 /**
@@ -860,5 +914,77 @@ public abstract class BaseJavaTool implements McpTool {
             }
         }
         return result.toString();
+    }
+
+    // --- Fresh-parse helpers (P41: stale AST positions after edits) ---
+    // The in-memory Spoon model's positions become stale after edits because
+    // writeFile updates the file on disk but does not re-parse the model. Tools
+    // that use position().getLine()/getEndLine() for insertion/removal points
+    // would operate on wrong lines. These helpers re-parse the current on-disk
+    // file in a lightweight noclasspath launcher to obtain accurate positions.
+
+    /**
+     * Re-parses the current on-disk file and returns the CtType matching the
+     * given class name. Returns {@code null} if parsing fails or the type is
+     * not found; callers fall back to the loaded model's type.
+     */
+    protected static CtType<?> locateFreshType(java.nio.file.Path file, String className) {
+        try {
+            spoon.Launcher fresh = new spoon.Launcher();
+            fresh.addInputResource(file.toAbsolutePath().toString());
+            fresh.getEnvironment().setNoClasspath(true);
+            fresh.getEnvironment().setCommentEnabled(true);
+            fresh.getEnvironment().setAutoImports(false);
+            fresh.buildModel();
+            return fresh.getModel().getAllTypes().stream()
+                    .filter(t -> t.getQualifiedName().equals(className))
+                    .findFirst().orElse(null);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Re-parses the current on-disk file and returns the CtMethod matching
+     * the given method name (and optional signature). Returns {@code null}
+     * if not found. Shared by ReplaceMethodBodyTool and other tools that need
+     * accurate method body positions after edits.
+     */
+    protected static CtMethod<?> locateFreshMethod(java.nio.file.Path file, String className,
+                                                    String methodName, String signature) {
+        CtType<?> t = locateFreshType(file, className);
+        if (t == null) return null;
+        java.util.List<CtMethod<?>> cands = t.getMethods().stream()
+                .filter(m -> m.getSimpleName().equals(methodName))
+                .collect(java.util.stream.Collectors.toList());
+        if (signature == null || signature.isBlank()) {
+            return cands.size() == 1 ? cands.get(0) : null;
+        }
+        List<String> sigParams = splitTopLevelCommas(signature);
+        for (CtMethod<?> m : cands) {
+            if (freshParamsMatch(m, sigParams)) return m;
+        }
+        return null;
+    }
+
+    /** Compares a method's parameter simple names against a signature list. */
+    private static boolean freshParamsMatch(CtMethod<?> method, List<String> sigParams) {
+        if (method.getParameters().size() != sigParams.size()) return false;
+        for (int i = 0; i < sigParams.size(); i++) {
+            String expected = eraseSigType(sigParams.get(i));
+            String actual = method.getParameters().get(i).getType() != null
+                    ? method.getParameters().get(i).getType().getSimpleName() : "";
+            if (!actual.equals(expected)) return false;
+        }
+        return true;
+    }
+
+    private static String eraseSigType(String type) {
+        String t = type.trim();
+        int lt = t.indexOf('<');
+        if (lt >= 0) t = t.substring(0, lt).trim();
+        int lastDot = t.lastIndexOf('.');
+        if (lastDot >= 0) t = t.substring(lastDot + 1);
+        return t;
     }
 }

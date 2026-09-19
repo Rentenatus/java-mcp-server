@@ -113,7 +113,7 @@ public class EditLineTool extends BaseJavaTool {
         // Write via EditManager (preserves line ending, validates fingerprint)
         ProjectEntry updated = editManager.writeFile(entry, file, newFileContent, expectedFingerprint);
         manager.updateEntry(updated);
-        editManager.logEdit(toolName());
+        editManager.logEdit(toolName() + ": line " + lineNumber + " in " + file.getFileName());
 
         StringBuilder sb = new StringBuilder();
         sb.append("Line ").append(lineNumber).append(" replaced in ").append(file.getFileName()).append(".\n");

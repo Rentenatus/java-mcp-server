@@ -106,7 +106,7 @@ public class MoveClassTool extends BaseJavaTool {
         Files.createDirectories(newPackageDir);
         entry = editManager.writeFile(entry, newFile, newSource, null);
         manager.updateEntry(entry);
-        editManager.logEdit(toolName());
+        editManager.logEdit(toolName() + ": " + className + " from " + oldPackage + " to " + newPackage);
 
         // Delete old file — only when NOT in a transaction. During a
         // transaction the new file is only buffered in memory; deleting the
@@ -133,7 +133,7 @@ public class MoveClassTool extends BaseJavaTool {
                 if (!updatedContent.equals(content)) {
                     entry = editManager.writeFile(entry, file, updatedContent, null);
                     manager.updateEntry(entry);
-                    editManager.logEdit(toolName());
+                    editManager.logEdit(toolName() + ": updated imports in " + file.getFileName() + " for " + className + " -> " + newPackage);
                     importsUpdated++;
                 }
             }

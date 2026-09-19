@@ -112,9 +112,12 @@ public class RemoveMemberTool extends BaseJavaTool {
         if (file == null) return error("Cannot determine source file.");
 
         String source = LineEndings.readNormalized(file);
+        // P45: use fresh-parse positions to avoid stale line numbers after prior edits
+        CtType<?> freshType = locateFreshType(file, className);
+        CtType<?> posType = (freshType != null) ? freshType : targetType;
         String newSource;
         if ("method".equals(scope)) {
-            CtMethod<?> method = targetType.getMethods().stream()
+            CtMethod<?> method = posType.getMethods().stream()
                     .filter(m -> m.getSimpleName().equals(memberName))
                     .findFirst()
                     .orElse(null);
@@ -123,7 +126,7 @@ public class RemoveMemberTool extends BaseJavaTool {
             }
             newSource = removeMethodByPosition(source, method);
         } else if ("field".equals(scope)) {
-            CtField<?> field = targetType.getFields().stream()
+            CtField<?> field = posType.getFields().stream()
                     .filter(f -> f.getSimpleName().equals(memberName))
                     .findFirst()
                     .orElse(null);
@@ -140,7 +143,7 @@ public class RemoveMemberTool extends BaseJavaTool {
 
         entry = editManager.writeFile(entry, file, newSource, null);
         manager.updateEntry(entry);
-        editManager.logEdit(toolName());
+        editManager.logEdit(toolName() + ": " + scope + " " + memberName + " in " + className);
 
         StringBuilder sb = new StringBuilder();
         sb.append("Removed: ").append(className).append(".").append(memberName)
