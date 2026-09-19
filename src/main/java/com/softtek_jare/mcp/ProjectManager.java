@@ -319,6 +319,7 @@ public class ProjectManager {
             try {
                 launcher = new MavenLauncher(projectDir.toAbsolutePath().toString(), MavenLauncher.SOURCE_TYPE.APP_SOURCE);
                 launcher.getEnvironment().setCommentEnabled(true);
+                applyJdkClasspath(launcher);
                 LOG.info("Using MavenLauncher for {}", projectDir);
                 return launcher;
             } catch (Exception e) {
@@ -330,6 +331,7 @@ public class ProjectManager {
         launcher.getEnvironment().setNoClasspath(true);
         launcher.getEnvironment().setAutoImports(true);
         launcher.getEnvironment().setCommentEnabled(true);
+        applyJdkClasspath(launcher);
 
         Path srcDir = findSourceDir(projectDir, buildInfo);
         if (srcDir != null && Files.isDirectory(srcDir)) {
@@ -342,6 +344,35 @@ public class ProjectManager {
 
         LOG.info("Using noclasspath Launcher for {} (src: {})", buildInfo.type(), srcDir);
         return launcher;
+    }
+
+/**
+ * Supplements the Spoon launcher classpath with JDK module JARs
+ * (java.base, java.desktop, etc.) so JDK types like javax.swing are resolvable.
+ * Failures are logged and silently skipped; the launcher continues in
+ * noclasspath mode if no JDK JARs are available.
+ */
+    private static void applyJdkClasspath(Launcher launcher) {
+        try {
+            List<String> jdkCp = new JdkClasspathResolver().resolve();
+            if (jdkCp.isEmpty()) {
+                LOG.warn("JDK classpath empty; JDK types may be unresolved (noclasspath fallback)");
+                return;
+            }
+            List<String> combined = new ArrayList<>();
+            String[] existing = launcher.getEnvironment().getSourceClasspath();
+            if (existing != null) {
+                for (String s : existing) {
+                    combined.add(s);
+                }
+            }
+            combined.addAll(jdkCp);
+            launcher.getEnvironment().setSourceClasspath(combined.toArray(new String[0]));
+            LOG.info("JDK classpath applied: {} JARs ({} total classpath entries)",
+                    jdkCp.size(), combined.size());
+        } catch (Exception e) {
+            LOG.warn("JDK classpath resolution failed ({}); continuing without it", e.getMessage());
+        }
     }
 
 /**
