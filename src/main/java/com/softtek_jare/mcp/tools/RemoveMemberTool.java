@@ -196,19 +196,7 @@ public class RemoveMemberTool extends BaseJavaTool {
         String[] lines = source.split("\n", -1);
         int startIdx = startLine - 1; // 0-indexed
 
-        // Walk backwards to include Javadoc/comments/annotations above the method
-        int commentStart = startIdx;
-        for (int i = startIdx - 1; i >= 0; i--) {
-            String trimmed = lines[i].trim();
-            if (trimmed.isEmpty()) break;
-            if (trimmed.startsWith("/**") || trimmed.startsWith("*") || trimmed.startsWith("*/")
-                    || trimmed.startsWith("//") || trimmed.startsWith("/*")
-                    || trimmed.startsWith("@")) {
-                commentStart = i;
-            } else {
-                break;
-            }
-        }
+        int commentStart = commentBlockStart(lines, startIdx);
 
         int endIdx = Math.min(endLine, lines.length); // exclusive
         StringBuilder result = new StringBuilder();
@@ -244,19 +232,7 @@ public class RemoveMemberTool extends BaseJavaTool {
         // Single-field declaration (possibly spanning multiple lines): remove
         // the declaration lines plus any Javadoc/comment block above them.
 
-        // Walk backwards to include Javadoc/comments/annotations above the field
-        int commentStart = startIdx;
-        for (int i = startIdx - 1; i >= 0; i--) {
-            String trimmed = lines[i].trim();
-            if (trimmed.isEmpty()) break;
-            if (trimmed.startsWith("/**") || trimmed.startsWith("*") || trimmed.startsWith("*/")
-                    || trimmed.startsWith("//") || trimmed.startsWith("/*")
-                    || trimmed.startsWith("@")) {
-                commentStart = i;
-            } else {
-                break;
-            }
-        }
+        int commentStart = commentBlockStart(lines, startIdx);
 
         int endIdx = Math.min(Math.max(endLine, startLine), lines.length);
         return dropLines(lines, commentStart, endIdx);
@@ -289,6 +265,27 @@ public class RemoveMemberTool extends BaseJavaTool {
             if (i < lines.length - 1) result.append("\n");
         }
         return result.toString();
+    }
+
+    /**
+     * Walks backwards from {@code startIdx - 1} over contiguous Javadoc, comment,
+     * and annotation lines to find the first line of the block preceding the
+     * member declaration. Returns {@code startIdx} if there is no preceding block.
+     */
+    private static int commentBlockStart(String[] lines, int startIdx) {
+        int commentStart = startIdx;
+        for (int i = startIdx - 1; i >= 0; i--) {
+            String trimmed = lines[i].trim();
+            if (trimmed.isEmpty()) break;
+            if (trimmed.startsWith("/**") || trimmed.startsWith("*") || trimmed.startsWith("*/")
+                    || trimmed.startsWith("//") || trimmed.startsWith("/*")
+                    || trimmed.startsWith("@")) {
+                commentStart = i;
+            } else {
+                break;
+            }
+        }
+        return commentStart;
     }
 
     private List<String> scanStringLiterals(ProjectEntry entry, String memberName) {
