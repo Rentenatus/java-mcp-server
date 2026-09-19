@@ -27,6 +27,7 @@ package com.softtek_jare.mcp.tools;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import com.softtek_jare.mcp.edit.LineEndings;
 
 import com.softtek_jare.mcp.ProjectManager;
 import com.softtek_jare.mcp.edit.EditManager;
@@ -97,7 +98,7 @@ public class MoveClassTool extends BaseJavaTool {
         Path newFile = newPackageDir.resolve(simpleName + ".java");
 
         // Read old source, rewrite package declaration
-        String source = Files.readString(oldFile);
+        String source = LineEndings.readNormalized(oldFile);
         String newSource = source.replace("package " + oldPackage + ";",
                 "package " + newPackage + ";");
 
@@ -124,7 +125,7 @@ public class MoveClassTool extends BaseJavaTool {
                     ? type.getPosition().getFile().toPath() : null;
             if (file == null || file.equals(newFile)) continue;
             if (!Files.exists(file)) continue; // skip deleted files (old class location)
-            String content = Files.readString(file);
+            String content = LineEndings.readNormalized(file);
             if (content.contains(oldQualified)) {
                 java.util.regex.Pattern qualPattern = java.util.regex.Pattern.compile(
                         "\\b" + java.util.regex.Pattern.quote(oldQualified) + "\\b");

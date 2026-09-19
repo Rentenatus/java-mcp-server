@@ -27,6 +27,7 @@ package com.softtek_jare.mcp.tools;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import com.softtek_jare.mcp.edit.LineEndings;
 
 import com.softtek_jare.mcp.ProjectManager;
 import com.softtek_jare.mcp.edit.EditManager;
@@ -93,7 +94,7 @@ public class RemoveAnnotationTool extends BaseJavaTool {
         String targetErr = validateAnnotationTarget(targetType, targetName);
         if (targetErr != null) return error(targetErr);
 
-        String source = Files.readString(file);
+        String source = LineEndings.readNormalized(file);
         int[] window = annotationWindow(source, type, targetType, targetName);
         int startOffset = window[0];
         int endOffset = window[1];

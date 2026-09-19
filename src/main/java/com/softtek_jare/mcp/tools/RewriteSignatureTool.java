@@ -27,6 +27,7 @@ package com.softtek_jare.mcp.tools;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import com.softtek_jare.mcp.edit.LineEndings;
 
 import com.softtek_jare.mcp.ProjectManager;
 import com.softtek_jare.mcp.edit.EditManager;
@@ -116,7 +117,7 @@ public class RewriteSignatureTool extends BaseJavaTool {
                 ? target.getPosition().getFile().toPath() : null;
         if (file == null) return error("Cannot determine source file.");
 
-        String source = Files.readString(file);
+        String source = LineEndings.readNormalized(file);
         // Find the method declaration by locating the declaration line from the
         // AST and matching the signature there. The previous approach built an
         // exact string from erased simple names (strips generics like
@@ -298,7 +299,7 @@ public class RewriteSignatureTool extends BaseJavaTool {
             java.nio.file.Path file = fileEntry.getKey();
             java.util.Set<Integer> lineNumbers = fileEntry.getValue();
             try {
-                String source = java.nio.file.Files.readString(file);
+                String source = LineEndings.readNormalized(file);
                 String[] lines = source.split("\n", -1);
                 StringBuilder newSource = new StringBuilder();
                 int localCount = 0;

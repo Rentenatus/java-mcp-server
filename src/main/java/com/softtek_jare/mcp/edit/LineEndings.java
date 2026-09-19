@@ -24,6 +24,10 @@
 
 package com.softtek_jare.mcp.edit;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 /**
  * Utility for line-ending normalization in edit operations.
  *
@@ -80,5 +84,20 @@ public final class LineEndings {
         // target is CRLF: first normalize to LF, then convert to CRLF
         String lfOnly = content.replace("\r\n", "\n").replace("\r", "\n");
         return lfOnly.replace("\n", "\r\n");
+    }
+
+    /**
+     * Reads a file and strips all CR characters so that subsequent string
+     * matching works regardless of whether the file uses LF or CRLF line
+     * endings. This is the single read-side entry point for all edit tools;
+     * the write side ({@link com.softtek_jare.mcp.edit.EditManager#writeFile})
+     * preserves the original line ending on disk.
+     *
+     * @param file the file to read
+     * @return the file content with all CR characters removed (LF-only)
+     * @throws IOException if the file cannot be read
+     */
+    public static String readNormalized(Path file) throws IOException {
+        return normalizeForMatch(Files.readString(file));
     }
 }

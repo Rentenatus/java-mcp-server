@@ -97,8 +97,7 @@ public class EditLineTool extends BaseJavaTool {
         }
 
         // Read, normalize CR, split into lines
-        String rawContent = Files.readString(file);
-        String normalized = LineEndings.normalizeForMatch(rawContent);
+        String normalized = LineEndings.readNormalized(file);
         String[] lines = normalized.split("\n", -1);
 
         if (lineNumber > lines.length) {

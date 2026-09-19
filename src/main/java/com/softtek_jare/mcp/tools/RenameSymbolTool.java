@@ -27,6 +27,7 @@ package com.softtek_jare.mcp.tools;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import com.softtek_jare.mcp.edit.LineEndings;
 
 import com.softtek_jare.mcp.ProjectManager;
 import com.softtek_jare.mcp.edit.EditManager;
@@ -118,7 +119,7 @@ public class RenameSymbolTool extends BaseJavaTool {
         java.util.regex.Pattern namePattern = java.util.regex.Pattern.compile(
                 "\\b" + java.util.regex.Pattern.quote(oldName) + "\\b");
         for (Path file : affectedFiles) {
-            String source = Files.readString(file);
+            String source = LineEndings.readNormalized(file);
             String newContent;
             if (updateCallers) {
                 // Global: replace all code occurrences (but not strings/comments)

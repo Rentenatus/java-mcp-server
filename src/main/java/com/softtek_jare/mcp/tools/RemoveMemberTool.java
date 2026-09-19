@@ -27,6 +27,7 @@ package com.softtek_jare.mcp.tools;
 import io.modelcontextprotocol.server.McpSyncServerExchange;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import com.softtek_jare.mcp.edit.LineEndings;
 
 import com.softtek_jare.mcp.ProjectManager;
 import com.softtek_jare.mcp.edit.EditManager;
@@ -110,7 +111,7 @@ public class RemoveMemberTool extends BaseJavaTool {
                 ? targetType.getPosition().getFile().toPath() : null;
         if (file == null) return error("Cannot determine source file.");
 
-        String source = Files.readString(file);
+        String source = LineEndings.readNormalized(file);
         String newSource;
         if ("method".equals(scope)) {
             CtMethod<?> method = targetType.getMethods().stream()
