@@ -158,6 +158,26 @@ class AddMethodAddFieldTest {
         mgr.remove(entry.name());
     }
 
+    @Test
+    void addMethodErasureClashWithGenericCommaParam() throws Exception {
+        // Existing foo(int, Pair). Adding foo(int, Pair<K,V>) has the same erased
+        // signature [int, Pair] and must be reported as a clash. A naive comma
+        // split would split "Pair<K,V> m" into two fragments and miss the clash.
+        Path pair = srcDir.resolve("Pair.java");
+        Files.writeString(pair, "class Pair {}\n");
+        Path file = srcDir.resolve("G.java");
+        Files.writeString(file, "class G { void foo(int a, Pair b) {} }\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = addMethod.handle(null, methodReq(
+                entry.name(), "G", "foo", "void", "int x, Pair<K,V> m", null, null));
+
+        assertTrue(result.isError());
+        assertTrue(result.content().toString().contains("erasure"),
+                "expected erasure clash, got: " + result.content());
+        mgr.remove(entry.name());
+    }
+
     private static CallToolRequest methodReq(String name, String className, String methodName,
             String returnType, String parameters, String modifiers, String body) {
         Map<String, Object> args = new HashMap<>();

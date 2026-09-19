@@ -647,6 +647,31 @@ public abstract class BaseJavaTool implements McpTool {
         return sb.toString();
     }
 
+    /**
+     * Splits a comma-separated list on top-level commas only, keeping commas
+     * inside generic angle brackets together. For example {@code "Map<K, V>, int"}
+     * yields {@code ["Map<K, V>", "int"]}. Each fragment is trimmed. Shared by
+     * tools that parse method signatures or parameter lists.
+     */
+    protected static List<String> splitTopLevelCommas(String list) {
+        List<String> params = new ArrayList<>();
+        int depth = 0;
+        StringBuilder cur = new StringBuilder();
+        for (int i = 0; i < list.length(); i++) {
+            char c = list.charAt(i);
+            if (c == '<') depth++;
+            else if (c == '>') depth = Math.max(0, depth - 1);
+            if (c == ',' && depth == 0) {
+                params.add(cur.toString().trim());
+                cur.setLength(0);
+            } else {
+                cur.append(c);
+            }
+        }
+        if (cur.length() > 0) params.add(cur.toString().trim());
+        return params;
+    }
+
     // --- Shared annotation search-window helper (used by edit/remove annotation tools) ---
 
     /**

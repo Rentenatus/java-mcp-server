@@ -163,28 +163,7 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
     }
 
     private List<String> parseSignature(String sig) {
-        List<String> params = new ArrayList<>();
-        // Split on commas that are not inside generic angle brackets, so that
-        // "List<String>, int" yields ["List<String>", "int"] rather than the
-        // naive split producing ["List<String>", " int"] — actually naive split
-        // on "," already gives ["List<String>", " int"] which is fine, but
-        // "Map<K, V>, int" would wrongly split into three. Bracket-aware split
-        // keeps generic parameter lists together.
-        int depth = 0;
-        StringBuilder cur = new StringBuilder();
-        for (int i = 0; i < sig.length(); i++) {
-            char c = sig.charAt(i);
-            if (c == '<') depth++;
-            else if (c == '>') depth = Math.max(0, depth - 1);
-            if (c == ',' && depth == 0) {
-                params.add(cur.toString().trim());
-                cur.setLength(0);
-            } else {
-                cur.append(c);
-            }
-        }
-        if (cur.length() > 0) params.add(cur.toString().trim());
-        return params;
+        return splitTopLevelCommas(sig);
     }
 
     private boolean paramsMatch(CtMethod<?> method, List<String> sigParams) {

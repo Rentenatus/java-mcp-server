@@ -92,23 +92,13 @@ public class AddMethodTool extends BaseJavaTool {
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Type not found: " + className));
 
-        // Parse parameter types for erasure check
+        // Parse parameter types for erasure check. Use a bracket-aware split so
+        // that generic parameter lists like "Map<K, V> map, int n" are not split
+        // at the comma inside the angle brackets.
         List<String> paramTypes = new ArrayList<>();
         if (parameters != null && !parameters.isBlank()) {
-            for (String p : parameters.split(",")) {
-                String trimmed = p.trim();
-                // Skip 'final' modifier to get the actual type
-                String[] parts = trimmed.split("\\s+");
-                String paramType = parts[0];
-                if ("final".equals(paramType) && parts.length > 1) {
-                    paramType = parts[1];
-                }
-                // Erase generic type arguments so that "List<String>" matches
-                // the erased "List" used by TypeErasureChecker. Without this,
-                // a clash with an existing "List" parameter is missed.
-                int lt = paramType.indexOf('<');
-                if (lt >= 0) paramType = paramType.substring(0, lt).trim();
-                paramTypes.add(paramType);
+            for (String p : splitTopLevelCommas(parameters)) {
+                paramTypes.add(erasedParamSimpleName(p));
             }
         }
 
@@ -185,5 +175,25 @@ public class AddMethodTool extends BaseJavaTool {
         sb.append("Method added: ").append(className).append(".").append(methodName).append("\n");
         sb.append(formatMultiModuleWarning(entry));
         return ok(sb);
+    }
+
+    /**
+     * Extracts the erased simple type name from a single parameter fragment
+     * such as {@code "int count"}, {@code "final String label"}, or
+     * {@code "Map<K, V> map"}. Strips a leading {@code final} modifier, drops
+     * the parameter name (last whitespace-delimited token), erases generic
+     * arguments, and reduces a fully-qualified name to its simple name.
+     */
+    private static String erasedParamSimpleName(String param) {
+        String t = param.trim();
+        if (t.isEmpty()) return t;
+        while (t.startsWith("final ") || t.startsWith("final\t")) t = t.substring(6).trim();
+        int sp = t.lastIndexOf(' ');
+        String typePart = sp >= 0 ? t.substring(0, sp) : t;
+        int lt = typePart.indexOf('<');
+        if (lt >= 0) typePart = typePart.substring(0, lt).trim();
+        int lastDot = typePart.lastIndexOf('.');
+        if (lastDot >= 0) typePart = typePart.substring(lastDot + 1);
+        return typePart;
     }
 }
