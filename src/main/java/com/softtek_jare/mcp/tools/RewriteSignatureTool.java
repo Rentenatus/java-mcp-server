@@ -135,22 +135,29 @@ public class RewriteSignatureTool extends BaseJavaTool {
             return error("Could not find method declaration to replace. Pattern: " + oldDecl);
         }
 
-        if (!newSource.equals(source)) {
+        boolean signatureChanged = !newSource.equals(source);
+        if (signatureChanged) {
             entry = editManager.writeFile(entry, file, newSource, null);
             manager.updateEntry(entry);
             editManager.logEdit(toolName());
         }
 
         int callersUpdated = 0;
-        if ("signature_and_callers".equals(mode)) {
-            // Update caller sites: rewrite argument lists at invocation points
+        if (signatureChanged && "signature_and_callers".equals(mode)) {
+            // Update caller sites: rewrite argument lists at invocation points.
+            // Only when the signature actually changed — otherwise inserting
+            // TODO markers would be spurious noise at unchanged call sites.
             callersUpdated = updateCallers(entry, targetType, methodName, target);
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("Signature changed: ").append(methodName).append("(").append(getParamString(target)).append(") -> ").append(newDecl).append("\n");
+        if (!signatureChanged) {
+            sb.append("Signature unchanged: ").append(methodName).append("(").append(getParamString(target)).append(") — no edits made.\n");
+        } else {
+            sb.append("Signature changed: ").append(methodName).append("(").append(getParamString(target)).append(") -> ").append(newDecl).append("\n");
+        }
         sb.append("Mode: ").append(mode).append("\n");
-        if ("signature_and_callers".equals(mode)) {
+        if (signatureChanged && "signature_and_callers".equals(mode)) {
             sb.append("Callers updated: ").append(callersUpdated).append("\n");
         }
         sb.append(formatMultiModuleWarning(entry));
