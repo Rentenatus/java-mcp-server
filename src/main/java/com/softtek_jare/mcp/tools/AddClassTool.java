@@ -113,7 +113,14 @@ public class AddClassTool extends BaseJavaTool {
         String declKeyword = "abstract".equals(type) ? "abstract class" : type;
         src.append(declKeyword).append(" ").append(className).append(" {\n");
         if (body != null && !body.isBlank()) {
-            src.append(body).append("\n");
+            // Indent each body line by 4 spaces so members sit inside the class
+            // body, matching the convention used by add_method/add_field.
+            String memberIndent = "    ";
+            for (String line : body.split("\n", -1)) {
+                if (!line.isBlank()) src.append(memberIndent);
+                src.append(line);
+                src.append("\n");
+            }
         }
         src.append("}\n");
 
