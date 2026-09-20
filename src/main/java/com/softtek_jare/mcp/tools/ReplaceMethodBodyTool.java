@@ -155,14 +155,39 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
                     + "Cannot replace body of a method without one.");
         }
         int bodyStartLine = posMethod.getBody().getPosition().getLine();
-        int bodyEndLine = posMethod.getBody().getPosition().getEndLine();
         log.info("replace_method_body: {}.{} — model line {} | fresh line {} (file={}, used={})",
                 targetType.getSimpleName(), methodName,
                 target.getBody().getPosition().getLine(), bodyStartLine, file,
                 (posMethod == freshMethod) ? "fresh" : "model-fallback");
 
-        String source = LineEndings.readNormalized(file);
-        String newContent = replaceBodyInSource(source, bodyStartLine, bodyEndLine, newBody);
+        // Read the raw file once; derive the CR-stripped source used for editing.
+        String raw = Files.readString(file);
+        String source = LineEndings.normalizeForMatch(raw);
+        // Locate the method's opening brace precisely. The body's source start
+        // (a char offset in the on-disk file) points at the '{'; map it into the
+        // CR-stripped source by subtracting the CR characters before it. This is
+        // robust when the method body shares a line with other braces (e.g. a
+        // single-line class with single-line methods), where the previous
+        // "first '{' at or after the body line" heuristic matched an enclosing
+        // brace and corrupted siblings. Fall back to that heuristic only when no
+        // source start is available.
+        int open = -1;
+        int diskStart = posMethod.getBody().getPosition().getSourceStart();
+        if (diskStart >= 0) {
+            int crBefore = 0;
+            for (int k = 0; k < diskStart && k < raw.length(); k++) {
+                if (raw.charAt(k) == '\r') crBefore++;
+            }
+            int candidate = diskStart - crBefore;
+            if (candidate >= 0 && candidate < source.length() && source.charAt(candidate) == '{') {
+                open = candidate;
+            }
+        }
+        if (open < 0) {
+            int lineStart = lineStartOffset(source, bodyStartLine);
+            open = indexOfOpeningBrace(source, lineStart);
+        }
+        String newContent = replaceBodyInSource(source, open, newBody);
         newContent = insertImports(newContent, importResult.importsToAdd());
         entry = editManager.writeFile(entry, file, newContent, null);
         manager.updateEntry(entry);
@@ -227,18 +252,12 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
         return sb.toString();
     }
 
-    private static String replaceBodyInSource(String source, int bodyStartLine, int bodyEndLine, String newBody) {
-        if (bodyStartLine < 1) return source;
-
-        // The body position line is the line of the opening '{'. Find the first
-        // '{' at or after that line, then brace-match to the closing '}'. Both
-        // scans skip string/char literals and comments so braces inside them do
-        // not corrupt the match. The previous line-based heuristic searched
-        // backwards from the body line and matched the enclosing class brace,
-        // deleting the method signature.
-        int lineStart = lineStartOffset(source, bodyStartLine);
-        int open = indexOfOpeningBrace(source, lineStart);
+    private static String replaceBodyInSource(String source, int open, String newBody) {
         if (open < 0) return source;
+
+        // open is the char offset of the method's opening '{'. Brace-match to the
+        // closing '}'. Both scans skip string/char literals and comments so braces
+        // inside them do not corrupt the match.
         int close = matchingBrace(source, open);
         if (close < 0) return source;
 
