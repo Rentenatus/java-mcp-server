@@ -200,8 +200,7 @@ public class AddMethodTool extends BaseJavaTool {
         String source = LineEndings.readNormalized(file);
         // P42: use fresh-parse endLine to avoid stale positions after prior edits
         CtType<?> freshType = locateFreshType(file, className);
-        int endLine = (freshType != null) ? freshType.getPosition().getEndLine() : targetType.getPosition().getEndLine();
-        int lastBrace = findClassClosingBrace(source, endLine);
+        int lastBrace = classClosingBraceOffset(file, source, freshType, targetType);
         if (lastBrace < 0) return domainError("MALFORMED_SOURCE",
                 "Malformed source: no closing brace found in " + file.getFileName() + ".",
                 ctx("className", className, "methodName", methodName,

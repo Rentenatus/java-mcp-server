@@ -758,6 +758,55 @@ public abstract class BaseJavaTool implements McpTool {
     }
 
     /**
+     * Finds the offset (in the CR-stripped {@code source}) of the closing brace
+     * of the target type. Used by {@link AddMethodTool} and {@link AddFieldTool}
+     * to insert new members before the correct class closing brace.
+     *
+     * <p>The authoritative location is the type's {@code getSourceEnd()} — a char
+     * offset in the on-disk file that points at the type's own closing {@code '}'},
+     * obtained from a fresh re-parse so it stays accurate after prior session
+     * edits. The disk offset is mapped into the CR-stripped source by subtracting
+     * the CR characters before it. This is correct for files with several
+     * top-level types (and nested types, once supported): the last-{@code '}'}
+     * heuristic in {@link #findClassClosingBrace} would otherwise pick a sibling
+     * type's brace and insert the member into the wrong type.
+     *
+     * <p>Falls back to {@link #findClassClosingBrace} when no source end is
+     * available (e.g. a type without a position).
+     *
+     * @param file        the on-disk source file (read to count CR characters)
+     * @param source      the CR-stripped source used for editing
+     * @param freshType   the freshly re-parsed target type (preferred), or null
+     * @param targetType  the in-memory target type (fallback), non-null
+     * @return the offset of the type's closing {@code '}'}, or -1 if not found
+     */
+    protected static int classClosingBraceOffset(java.nio.file.Path file, String source,
+            CtType<?> freshType, CtType<?> targetType) {
+        spoon.reflect.declaration.CtType<?> posType = (freshType != null) ? freshType : targetType;
+        if (posType != null && posType.getPosition() != null) {
+            int diskEnd = posType.getPosition().getSourceEnd();
+            if (diskEnd >= 0) {
+                String raw;
+                try {
+                    raw = java.nio.file.Files.readString(file);
+                } catch (java.io.IOException e) {
+                    raw = source;
+                }
+                int crBefore = 0;
+                for (int k = 0; k < diskEnd && k < raw.length(); k++) {
+                    if (raw.charAt(k) == '\r') crBefore++;
+                }
+                int candidate = diskEnd - crBefore;
+                if (candidate >= 0 && candidate < source.length() && source.charAt(candidate) == '}') {
+                    return candidate;
+                }
+            }
+        }
+        int endLine = (posType != null && posType.getPosition() != null) ? posType.getPosition().getEndLine() : 0;
+        return findClassClosingBrace(source, endLine);
+    }
+
+    /**
      * Finds the offset of the class closing brace by searching for the last
      * top-level {@code '}'} in the source. Scans backward from the end of the
      * file, skipping {@code '}'} characters inside comments and string/char

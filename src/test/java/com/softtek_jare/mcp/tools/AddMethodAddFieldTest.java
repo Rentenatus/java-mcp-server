@@ -183,6 +183,40 @@ class AddMethodAddFieldTest {
         mgr.remove(entry.name());
     }
 
+    @Test
+    void addMethodToFirstOfTwoTopLevelTypes() throws Exception {
+        // A file may contain several top-level types (only one may be public).
+        // Adding a method to the FIRST type must insert before that type's
+        // closing brace, not the last '}' in the file (which belongs to the
+        // second type). findClassClosingBrace must respect the target type's
+        // end line; inserting into the wrong type silently corrupts the sibling.
+        Path file = srcDir.resolve("Pair.java");
+        Files.writeString(file, """
+            class First {
+            }
+            class Second {
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = addMethod.handle(null, methodReq(
+                entry.name(), "First", "bar", "void", null, "public", "return;"));
+
+        assertFalse(result.isError(), () -> result.content().toString());
+        String written = Files.readString(file);
+        // The new method must be inside First, before First's closing brace.
+        int barIdx = written.indexOf("public void bar");
+        int firstClose = written.indexOf("}");
+        assertTrue(barIdx >= 0, "new method missing:\n" + written);
+        assertTrue(barIdx < firstClose,
+                "new method must be inside First (before its closing brace):\n" + written);
+        // Second must not receive the stray method.
+        int secondOpen = written.indexOf("}", firstClose + 1);
+        assertTrue(secondOpen < 0 || written.substring(firstClose + 1).indexOf("public void bar") < 0,
+                "Second must not contain the new method:\n" + written);
+        mgr.remove(entry.name());
+    }
+
     private static CallToolRequest methodReq(String name, String className, String methodName,
             String returnType, String parameters, String modifiers, String body) {
         Map<String, Object> args = new HashMap<>();
