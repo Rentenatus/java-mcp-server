@@ -100,8 +100,17 @@ public class EditLineTool extends BaseJavaTool {
         String normalized = LineEndings.readNormalized(file);
         String[] lines = normalized.split("\n", -1);
 
-        if (lineNumber > lines.length) {
-            return domainError("DOMAIN_ERROR", "File has " + lines.length + " line(s); cannot replace line " + lineNumber);
+        // A file ending with a trailing newline produces a phantom empty element
+        // after the last content line (e.g. "a\nb\n" -> ["a","b",""]). That phantom
+        // is not a real line: "replacing" it silently drops the file's trailing
+        // newline and appends content to a non-existent line. edit_line replaces
+        // existing lines only, so the phantom trailing element is not addressable.
+        boolean trailingNewline = normalized.endsWith("\n");
+        int lineCount = trailingNewline ? lines.length - 1 : lines.length;
+        if (lineCount < 1) lineCount = lines.length; // empty/single-newline file
+
+        if (lineNumber > lineCount) {
+            return domainError("DOMAIN_ERROR", "File has " + lineCount + " line(s); cannot replace line " + lineNumber);
         }
 
         // Normalize CR from newContent as well

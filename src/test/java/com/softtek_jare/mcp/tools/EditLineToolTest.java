@@ -111,6 +111,40 @@ class EditLineToolTest {
     }
 
     @Test
+    void phantomTrailingLineNotAddressable() throws Exception {
+        // File "class C {}\n" has 1 content line + a trailing newline. The
+        // trailing newline must not create a replaceable phantom "line 2".
+        Path file = srcDir.resolve("C2.java");
+        Files.writeString(file, "class C {}\n");
+        ProjectEntry entry = loadProject(file);
+
+        CallToolResult result = tool.handle(
+                null, mockRequest(entry.name(), file.toString(), 2, "int x;"));
+
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
+        // Trailing newline must be preserved (not dropped by a phantom edit).
+        String written = Files.readString(file);
+        assertTrue(written.endsWith("\n"), "trailing newline must be preserved");
+        assertFalse(written.contains("int x;"));
+    }
+
+    @Test
+    void replaceLastContentLinePreservesTrailingNewline() throws Exception {
+        Path file = srcDir.resolve("C3.java");
+        Files.writeString(file, "class C {\nint x;\n}\n");
+        ProjectEntry entry = loadProject(file);
+
+        CallToolResult result = tool.handle(
+                null, mockRequest(entry.name(), file.toString(), 3, "} // closed"));
+
+        assertFalse(result.isError());
+        String written = Files.readString(file);
+        assertTrue(written.endsWith("\n"), "trailing newline must be preserved");
+        assertTrue(written.contains("} // closed"));
+    }
+
+    @Test
     void lineNumberZero() throws Exception {
         Path file = srcDir.resolve("D.java");
         Files.writeString(file, "class D {}\n");
