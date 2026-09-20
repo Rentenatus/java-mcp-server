@@ -298,4 +298,34 @@ class StructuralToolsTest {
         args.put("newPackage", newPackage);
         return new CallToolRequest("move_class", args);
     }
+
+    @Test
+    void moveClassMavenLayoutUsesSourceRoot() throws Exception {
+        // Maven-style layout: sources live under src/main/java, not the project root.
+        // move_class must resolve the destination against the source root, not projectDir.
+        Path projRoot = tempDir.resolve("mvnproj");
+        Path srcRoot = projRoot.resolve("src/main/java");
+        Path oldDir = srcRoot.resolve("com/oldpkg");
+        Files.createDirectories(oldDir);
+        Files.writeString(oldDir.resolve("Old.java"),
+                "package com.oldpkg;\n\nclass Old {}\n");
+        // Minimal pom.xml so the loader detects MAVEN
+        Files.writeString(projRoot.resolve("pom.xml"),
+                "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">"
+                + "<modelVersion>4.0.0</modelVersion>"
+                + "<groupId>test</groupId><artifactId>test</artifactId><version>1</version>"
+                + "</project>");
+        ProjectEntry entry = mgr.load(projRoot.toString(), "mvnproj", null, true, true);
+        MoveClassTool tool = new MoveClassTool(mgr, editMgr);
+
+        CallToolResult result = tool.handle(null, reqMove("mvnproj", "com.oldpkg.Old", "com.newpkg"));
+
+        assertFalse(result.isError(), () -> result.content().toString());
+        // The new file must be under src/main/java/com/newpkg/, NOT com/newpkg/ at the project root.
+        assertTrue(Files.exists(srcRoot.resolve("com/newpkg/Old.java")),
+                "moved file must be under src/main/java:\n" + Files.readString(srcRoot.resolve("com/newpkg/Old.java")));
+        assertFalse(Files.exists(projRoot.resolve("com/newpkg/Old.java")),
+                "file must NOT be placed at project root");
+        mgr.remove("mvnproj");
+    }
 }

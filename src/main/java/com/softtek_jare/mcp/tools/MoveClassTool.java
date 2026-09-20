@@ -90,7 +90,8 @@ public class MoveClassTool extends BaseJavaTool {
                 ? targetType.getPackage().getQualifiedName() : "";
         String simpleName = targetType.getSimpleName();
 
-        Path srcDir = entry.projectDir();
+        Path srcDir = ProjectManager.resolveSourceRoot(entry);
+        if (srcDir == null) srcDir = entry.projectDir();
         if (srcDir == null) srcDir = entry.originalProjectDir();
         if (srcDir == null) return domainError("DOMAIN_ERROR", "Cannot determine source directory.");
 
