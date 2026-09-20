@@ -147,6 +147,14 @@ public class EditLineTool extends BaseJavaTool {
             Path resolved = entry.originalProjectDir().resolve(filePath);
             if (Files.exists(resolved)) return resolved;
         }
+        // Try source root (e.g. src/main/java for Maven projects) — a relative
+        // path like "com/example/Foo.java" only exists under the source root,
+        // not the project root.
+        Path sourceRoot = ProjectManager.resolveSourceRoot(entry);
+        if (sourceRoot != null && !sourceRoot.equals(srcDir)) {
+            Path resolved = sourceRoot.resolve(filePath);
+            if (Files.exists(resolved)) return resolved;
+        }
         return p;
     }
 }

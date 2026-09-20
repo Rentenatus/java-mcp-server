@@ -184,6 +184,33 @@ class EditLineToolTest {
         mgr.remove(entry.name());
     }
 
+    @Test
+    void relativePathResolvedAgainstSourceRoot() throws Exception {
+        // Maven-style layout: project root contains src/main/java/com/example/Foo.java.
+        // A relative path like "com/example/Foo.java" must resolve against the
+        // source root (src/main/java), not the project root.
+        Path projRoot = tempDir.resolve("mavenproj");
+        Path srcRoot = projRoot.resolve("src/main/java/com/example");
+        Files.createDirectories(srcRoot);
+        Path file = srcRoot.resolve("Foo.java");
+        Files.writeString(file, "package com.example;\n\nclass Foo {\n    int x;\n}\n");
+        // Minimal pom.xml so the loader detects MAVEN
+        Files.writeString(projRoot.resolve("pom.xml"),
+                "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">"
+                + "<modelVersion>4.0.0</modelVersion>"
+                + "<groupId>test</groupId><artifactId>test</artifactId><version>1</version>"
+                + "</project>");
+        ProjectEntry entry = mgr.load(projRoot.toString(), "mavenproj", null, true, true);
+
+        CallToolResult result = tool.handle(
+                null, mockRequest("mavenproj", "com/example/Foo.java", 4, "    int z = 99;"));
+
+        assertFalse(result.isError(), () -> result.content().toString());
+        String written = Files.readString(file);
+        assertTrue(written.contains("int z = 99;"), "relative path edit must reach the file:\n" + written);
+        mgr.remove("mavenproj");
+    }
+
     private ProjectEntry loadProject(Path file) throws Exception {
         Path projDir = file.getParent().getParent();
         ProjectEntry entry = mgr.load(projDir.toString(), null, null, true, true);

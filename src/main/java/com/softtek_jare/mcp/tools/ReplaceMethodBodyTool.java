@@ -279,17 +279,6 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
                 + source.substring(close + 1);     // remainder of the file
     }
 
-    /** Returns the char offset of the start of the given 1-indexed line. */
-    private static int lineStartOffset(String source, int line1) {
-        int idx = 0;
-        for (int l = 1; l < line1; l++) {
-            int nl = source.indexOf('\n', idx);
-            if (nl < 0) return source.length();
-            idx = nl + 1;
-        }
-        return idx;
-    }
-
     /** Leading whitespace of the (sub)string starting at {@code from}. */
     private static String leadingWhitespace(String s, int from) {
         StringBuilder sb = new StringBuilder();
