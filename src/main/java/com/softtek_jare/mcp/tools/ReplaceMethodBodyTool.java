@@ -187,7 +187,16 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
             int lineStart = lineStartOffset(source, bodyStartLine);
             open = indexOfOpeningBrace(source, lineStart);
         }
-        String newContent = replaceBodyInSource(source, open, newBody);
+        if (open < 0) {
+            return domainError("DOMAIN_ERROR", "Cannot locate the opening brace of method '" + methodName
+                    + "' in " + file.getFileName() + ". The file may be syntactically inconsistent.");
+        }
+        int close = matchingBrace(source, open);
+        if (close < 0) {
+            return domainError("DOMAIN_ERROR", "Cannot locate the closing brace of method '" + methodName
+                    + "' in " + file.getFileName() + ". Unbalanced braces in the source.");
+        }
+        String newContent = replaceBodyInSource(source, open, close, newBody);
         newContent = insertImports(newContent, importResult.importsToAdd());
         entry = editManager.writeFile(entry, file, newContent, null);
         manager.updateEntry(entry);
@@ -252,14 +261,11 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
         return sb.toString();
     }
 
-    private static String replaceBodyInSource(String source, int open, String newBody) {
-        if (open < 0) return source;
+    private static String replaceBodyInSource(String source, int open, int close, String newBody) {
+        if (open < 0 || close < 0) return source;
 
-        // open is the char offset of the method's opening '{'. Brace-match to the
-        // closing '}'. Both scans skip string/char literals and comments so braces
-        // inside them do not corrupt the match.
-        int close = matchingBrace(source, open);
-        if (close < 0) return source;
+        // open is the char offset of the method's opening '{'; close is its
+        // matching '}'. Both were verified by the caller.
 
         // Indentation of the line containing the opening brace == method indent.
         int lineBegin = source.lastIndexOf('\n', open) + 1;
