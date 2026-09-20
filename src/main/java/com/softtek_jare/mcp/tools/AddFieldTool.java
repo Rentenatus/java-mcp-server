@@ -66,7 +66,11 @@ public class AddFieldTool extends BaseJavaTool {
             "fieldName", Map.of("type", "string", "description", "Field name"),
             "type", Map.of("type", "string", "description", "Field type (e.g. 'String', 'int')"),
             "modifiers", Map.of("type", "string", "description", "Optional: 'private', 'public', 'static', 'final'"),
-            "initializer", Map.of("type", "string", "description", "Optional: initializer expression (e.g. '\"hello\"' or '42')")
+            "initializer", Map.of("type", "string", "description", "Optional: initializer expression (e.g. '\"hello\"' or '42')"),
+            "imports", Map.of("type", "array", "description",
+                "Optional: list of fully-qualified import names (e.g. ['java.util.List']) "
+                + "to disambiguate types with the same simple name in different packages. "
+                + "Each FQN must be a project type or a loadable JDK class; invalid FQNs are reported as unresolved.")
         );
     }
     @Override protected java.util.List<String> toolRequired() { return req("name", "className", "fieldName", "type"); }
@@ -79,6 +83,7 @@ public class AddFieldTool extends BaseJavaTool {
         String type = arg(request, "type");
         String modifiers = arg(request, "modifiers");
         String initializer = arg(request, "initializer");
+        java.util.List<String> manualImports = stringListArg(request, "imports");
 
         ProjectEntry entry = findEntry(name);
         requireEditable(entry);
@@ -103,7 +108,7 @@ public class AddFieldTool extends BaseJavaTool {
         if (initializer != null && !initializer.isBlank()) {
             checkText += " " + initializer;
         }
-        var importResult = new AutoImportResolver().resolve(entry, targetType, checkText);
+        var importResult = new AutoImportResolver().resolve(entry, targetType, checkText, manualImports);
         if (!importResult.unresolvedTypes().isEmpty()) {
             return domainError("UNRESOLVED_TYPES",
                     "Cannot resolve type(s) in field declaration: " + importResult.unresolvedTypes()

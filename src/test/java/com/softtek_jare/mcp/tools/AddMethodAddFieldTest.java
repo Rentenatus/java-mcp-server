@@ -217,6 +217,54 @@ class AddMethodAddFieldTest {
         mgr.remove(entry.name());
     }
 
+    @Test
+    void addFieldWithManualImportDisambiguatesList() throws Exception {
+        // java.util.List and java.awt.List share the simple name "List". Without
+        // a manual import, add_field blocks with UNRESOLVED_TYPES. With the
+        // imports parameter set to ["java.util.List"], the type resolves and the
+        // import is inserted.
+        Path file = srcDir.resolve("Hist.java");
+        Files.writeString(file, "class Hist {\n}\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = addField.handle(null, fieldReq(
+                entry.name(), "Hist", "items", "List<String>", "private", null,
+                java.util.List.of("java.util.List")));
+
+        assertFalse(result.isError(), () -> result.content().toString());
+        String written = Files.readString(file);
+        assertTrue(written.contains("import java.util.List;"),
+                "import must be inserted, got:\n" + written);
+        assertTrue(written.contains("private List<String> items;"),
+                "field must use simple name, got:\n" + written);
+        assertTrue(!written.contains("java.util.List<String> items"),
+                "FQN must not leak into the field declaration, got:\n" + written);
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void addFieldWithInvalidManualImportReportedAsUnresolved() throws Exception {
+        // A manual import that is neither a project type nor a loadable JDK class
+        // must be reported as unresolved — the agent cannot inject a bogus import.
+        Path file = srcDir.resolve("Bog.java");
+        Files.writeString(file, "class Bog {\n}\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = addField.handle(null, fieldReq(
+                entry.name(), "Bog", "x", "List<String>", "private", null,
+                java.util.List.of("com.does.not.exist.List")));
+
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
+        assertTrue(result.content().toString().contains("List"),
+                "should mention the unresolved type, got: " + result.content());
+        // The field must not have been added.
+        String written = Files.readString(file);
+        assertTrue(!written.contains("items"),
+                "no field should be added on unresolved import, got:\n" + written);
+        mgr.remove(entry.name());
+    }
+
     private static CallToolRequest methodReq(String name, String className, String methodName,
             String returnType, String parameters, String modifiers, String body) {
         Map<String, Object> args = new HashMap<>();
@@ -239,6 +287,19 @@ class AddMethodAddFieldTest {
         args.put("type", type);
         if (modifiers != null) args.put("modifiers", modifiers);
         if (initializer != null) args.put("initializer", initializer);
+        return new CallToolRequest("add_field", args);
+    }
+
+    private static CallToolRequest fieldReq(String name, String className, String fieldName,
+            String type, String modifiers, String initializer, java.util.List<String> imports) {
+        Map<String, Object> args = new HashMap<>();
+        args.put("name", name);
+        args.put("className", className);
+        args.put("fieldName", fieldName);
+        args.put("type", type);
+        if (modifiers != null) args.put("modifiers", modifiers);
+        if (initializer != null) args.put("initializer", initializer);
+        if (imports != null) args.put("imports", imports);
         return new CallToolRequest("add_field", args);
     }
 }

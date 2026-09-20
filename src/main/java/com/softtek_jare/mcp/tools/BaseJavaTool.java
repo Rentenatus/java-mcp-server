@@ -135,6 +135,28 @@ public abstract class BaseJavaTool implements McpTool {
         return val != null && val;
     }
 
+    /**
+     * Extracts a list-of-strings argument from the request, returning an
+     * empty list if absent. Accepts both {@code List<String>} and arrays of
+     * String; non-String entries are coerced via {@code String.valueOf}.
+     * Returns an empty list (never null) when the key is missing or null.
+     */
+    @SuppressWarnings("unchecked")
+    protected static java.util.List<String> stringListArg(CallToolRequest request, String key) {
+        Object val = request.arguments().get(key);
+        if (val == null) return java.util.List.of();
+        java.util.List<String> result = new java.util.ArrayList<>();
+        if (val instanceof java.util.List<?> list) {
+            for (Object o : list) result.add(o == null ? null : String.valueOf(o));
+        } else if (val instanceof Object[] arr) {
+            for (Object o : arr) result.add(o == null ? null : String.valueOf(o));
+        } else {
+            // Single string — treat as a one-element list for convenience.
+            result.add(String.valueOf(val));
+        }
+        return result;
+    }
+
 /**
  * Finds a loaded project entry by name, throwing if not found.
  */

@@ -239,4 +239,81 @@ class AutoImportResolverTest {
                 "non-existent type should be unresolved, got: " + result.unresolvedTypes());
         mgr.remove(entry.name());
     }
+
+    @Test
+    void manualImportDisambiguatesSameSimpleName() throws Exception {
+        // "List" is ambiguous between java.util.List and java.awt.List. With a
+        // manual import of java.util.List, the resolver should accept it and
+        // add the import, without leaving the type unresolved.
+        Path src = tempDir.resolve("src");
+        Files.createDirectories(src);
+        Files.writeString(src.resolve("X.java"), "class X {}\n");
+
+        ProjectManager mgr = new ProjectManager();
+        ProjectEntry entry = mgr.load(src.toString(), null, null, true, true);
+        CtType<?> type = entry.model().getAllTypes().stream().findFirst().orElseThrow();
+
+        AutoImportResolver resolver = new AutoImportResolver();
+        var result = resolver.resolve(entry, type,
+                "List<String> items;",
+                java.util.List.of("java.util.List"));
+
+        assertTrue(result.importsToAdd().contains("java.util.List"),
+                "manual FQN should be added to imports, got: " + result.importsToAdd());
+        assertTrue(result.unresolvedTypes().isEmpty(),
+                "no unresolved types expected, got: " + result.unresolvedTypes());
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void manualImportInvalidFqnReportedAsUnresolved() throws Exception {
+        // A manual import that is neither a project type nor a loadable JDK
+        // class must be reported as unresolved, so the agent cannot inject a
+        // non-existent import that would break compilation.
+        Path src = tempDir.resolve("src");
+        Files.createDirectories(src);
+        Files.writeString(src.resolve("X.java"), "class X {}\n");
+
+        ProjectManager mgr = new ProjectManager();
+        ProjectEntry entry = mgr.load(src.toString(), null, null, true, true);
+        CtType<?> type = entry.model().getAllTypes().stream().findFirst().orElseThrow();
+
+        AutoImportResolver resolver = new AutoImportResolver();
+        var result = resolver.resolve(entry, type,
+                "List<String> items;",
+                java.util.List.of("com.does.not.exist.List"));
+
+        assertTrue(result.unresolvedTypes().stream().anyMatch(u -> u.contains("List")),
+                "invalid manual FQN should be reported unresolved, got: " + result.unresolvedTypes());
+        assertTrue(result.importsToAdd().isEmpty(),
+                "no imports should be added for an invalid FQN, got: " + result.importsToAdd());
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void manualImportProjectTypeResolves() throws Exception {
+        // A manual import pointing at a project type should resolve even if
+        // the same simple name exists in the JDK (manual override wins).
+        Path src = tempDir.resolve("src");
+        Files.createDirectories(src);
+        Files.writeString(src.resolve("X.java"), "class X {}\n");
+        Files.writeString(src.resolve("Service.java"), "class Service {}\n");
+
+        ProjectManager mgr = new ProjectManager();
+        ProjectEntry entry = mgr.load(src.toString(), null, null, true, true);
+        CtType<?> type = entry.model().getAllTypes().stream()
+                .filter(t -> t.getSimpleName().equals("X")).findFirst().orElseThrow();
+
+        AutoImportResolver resolver = new AutoImportResolver();
+        // Reference "Service" with a manual FQN that matches the project type.
+        var result = resolver.resolve(entry, type,
+                "Service s = new Service();",
+                java.util.List.of("Service"));
+
+        assertTrue(result.importsToAdd().contains("Service"),
+                "manual project FQN should be added, got: " + result.importsToAdd());
+        assertTrue(result.unresolvedTypes().isEmpty(),
+                "no unresolved types expected, got: " + result.unresolvedTypes());
+        mgr.remove(entry.name());
+    }
 }
