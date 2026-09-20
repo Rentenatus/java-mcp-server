@@ -186,7 +186,7 @@ class FileWritePipelineTest {
             projectDir, null, null, "RAW",
             false, null,
             projectDir, "test-source",
-            new HashMap<>(fingerprints), false, true, 1, 1, false, java.util.Set.of()
+            new HashMap<>(fingerprints), false, true, 1, 1, java.util.Set.of(), java.util.Set.of()
         );
     }
 }

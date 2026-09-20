@@ -54,9 +54,26 @@ public record ProjectEntry(
         boolean editable,
         int modulesDetected,
         int modulesLoaded,
-        boolean modelDirty,
+        Set<Path> dirtyFiles,
         Set<Path> editedFiles
 ) {
+    /**
+     * Derived from {@link #dirtyFiles()}: {@code true} when at least one source
+     * file has been edited since load and the in-memory model is stale.
+     * Replaces the former {@code boolean modelDirty} component.
+     */
+    public boolean modelDirty() {
+        return !dirtyFiles.isEmpty();
+    }
+
+    public boolean isModelDirty() {
+        return !dirtyFiles.isEmpty();
+    }
+
+    public boolean isFileDirty(Path file) {
+        return dirtyFiles.contains(file.normalize());
+    }
+
     public boolean isFileEdited(Path file) {
         return editedFiles.contains(file.normalize());
     }

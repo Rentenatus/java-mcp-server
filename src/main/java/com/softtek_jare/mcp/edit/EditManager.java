@@ -82,14 +82,14 @@ public class EditManager {
      *   <li>Optimistic lock check (fingerprint validation)</li>
      *   <li>Detect and preserve existing line-ending convention</li>
      *   <li>Write to temp file, then atomic rename</li>
-     *   <li>Mark model as dirty (fingerprints stay at load-time for dirty detection)</li>
+     *   <li>Mark the edited file dirty (per-file model staleness) and track it for fingerprint skipping</li>
      * </ol>
      *
      * @param entry              the loaded project entry
      * @param file               the target file on disk
      * @param newContent         the new file content (may use any line ending)
      * @param expectedFingerprint optional fingerprint; null means not provided
-     * @return the updated project entry with modelDirty=true
+     * @return the updated project entry with the edited file added to dirtyFiles
      * @throws IOException if the write fails
      * @throws IllegalArgumentException if the optimistic lock check fails
      */
@@ -125,8 +125,11 @@ public class EditManager {
             throw e;
         }
 
-        // 5. Mark model as dirty and track the edited file for per-file fingerprint skipping
-        Set<Path> updatedEdited = new java.util.HashSet<>(entry.editedFiles());
+        // 5. Mark the edited file dirty (per-file model staleness) and track it
+        //    for per-file fingerprint skipping (editedFiles).
+        Set<Path> updatedDirty = new HashSet<>(entry.dirtyFiles());
+        updatedDirty.add(file.normalize());
+        Set<Path> updatedEdited = new HashSet<>(entry.editedFiles());
         updatedEdited.add(file.normalize());
         return new ProjectEntry(
                 entry.name(), entry.alias(), entry.expiryDate(),
@@ -134,7 +137,9 @@ public class EditManager {
                 entry.buildType(), entry.delomboked(), entry.lombokVersion(),
                 entry.originalProjectDir(), entry.originalSource(),
                 entry.sourceFingerprints(), entry.expired(), entry.editable(),
-                entry.modulesDetected(), entry.modulesLoaded(), true, java.util.Collections.unmodifiableSet(updatedEdited));
+                entry.modulesDetected(), entry.modulesLoaded(),
+                java.util.Collections.unmodifiableSet(updatedDirty),
+                java.util.Collections.unmodifiableSet(updatedEdited));
     }
 
     /**

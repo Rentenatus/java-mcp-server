@@ -80,7 +80,7 @@ class MultiModuleWarningTest {
             Path.of("/tmp/test"), null, null, "MAVEN",
             false, null,
             Path.of("/tmp/test"), "test-source",
-            Map.of(), false, true, modulesDetected, modulesLoaded, false, java.util.Set.of()
+            Map.of(), false, true, modulesDetected, modulesLoaded, java.util.Set.of(), java.util.Set.of()
         );
     }
 }

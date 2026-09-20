@@ -67,7 +67,7 @@ class TransactionTest {
             "test", "test", Instant.now().plusSeconds(600),
             tempDir, null, null, "RAW",
             false, null, tempDir, "test",
-            new HashMap<>(Map.of(file.normalize(), fp)), false, true, 1, 1, false, java.util.Set.of());
+            new HashMap<>(Map.of(file.normalize(), fp)), false, true, 1, 1, java.util.Set.of(), java.util.Set.of());
     }
 
     @Test

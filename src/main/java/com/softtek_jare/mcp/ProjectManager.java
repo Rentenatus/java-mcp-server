@@ -146,7 +146,7 @@ public class ProjectManager {
                     sourceToAnalyze, launcher, model, buildInfo.type().name(),
                     delomboked, lombokVersion,
                     projectDir, source, buildFingerprints(projectDir), false, editable,
-                    modulesDetected, modulesLoaded, false, java.util.Set.of());
+                    modulesDetected, modulesLoaded, java.util.Set.of(), java.util.Set.of());
             entries.put(name, entry);
             LOG.info("Project '{}' loaded successfully ({} types, delomboked={})",
                     name, model.getAllTypes().size(), delomboked);
@@ -173,6 +173,8 @@ public class ProjectManager {
 
 /**
  * Marks a loaded project as dirty (model is stale after edits).
+ * All source files become dirty, since "mark dirty" means the whole model
+ * is considered stale.
  */
     public void markDirty(String nameOrAlias) {
         ProjectEntry entry = find(nameOrAlias);
@@ -184,7 +186,9 @@ public class ProjectManager {
             entry.buildType(), entry.delomboked(), entry.lombokVersion(),
             entry.originalProjectDir(), entry.originalSource(),
             entry.sourceFingerprints(), entry.expired(), entry.editable(),
-            entry.modulesDetected(), entry.modulesLoaded(), true, entry.editedFiles()));
+            entry.modulesDetected(), entry.modulesLoaded(),
+            java.util.Collections.unmodifiableSet(new java.util.HashSet<>(entry.sourceFingerprints().keySet())),
+            entry.editedFiles()));
     }
 
 /**
@@ -199,7 +203,9 @@ public class ProjectManager {
                     entry.buildType(), entry.delomboked(), entry.lombokVersion(),
                     entry.originalProjectDir(), entry.originalSource(),
                     entry.sourceFingerprints(), entry.expired(), entry.editable(),
-                    entry.modulesDetected(), entry.modulesLoaded(), true, entry.editedFiles()));
+                    entry.modulesDetected(), entry.modulesLoaded(),
+                    java.util.Collections.unmodifiableSet(new java.util.HashSet<>(entry.sourceFingerprints().keySet())),
+                    entry.editedFiles()));
             }
         }
     }
@@ -302,7 +308,7 @@ public class ProjectManager {
                     entry.buildType(), entry.delomboked(), entry.lombokVersion(),
                     entry.originalProjectDir(), entry.originalSource(),
                     entry.sourceFingerprints(), true, entry.editable(),
-                    entry.modulesDetected(), entry.modulesLoaded(), entry.modelDirty(), entry.editedFiles()));
+                    entry.modulesDetected(), entry.modulesLoaded(), entry.dirtyFiles(), entry.editedFiles()));
                 LOG.info("Project '{}' expired at {}", entry.name(), entry.expiryDate());
                 newlyExpired.add(entry.name());
             }

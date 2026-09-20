@@ -95,23 +95,24 @@ public class TransactionTools extends BaseJavaTool {
             int pending = editManager.getPendingChangeCount();
             boolean success = editManager.commitTransaction();
             if (success) {
-                manager.markAllDirty();
-                // Update editedFiles on all loaded entries so that subsequent
-                // edits to committed files skip fingerprint validation. Without
-                // this, the next edit would fail with a "modified since load"
-                // error because the on-disk fingerprint changed during commit.
+                // Update editedFiles (fingerprint skipping) and dirtyFiles (model
+                // staleness) on all loaded entries with the committed files.
+                // Replaces the former global markAllDirty() with per-file tracking.
                 java.util.Set<java.nio.file.Path> committed = editManager.getLastCommittedFiles();
                 for (var entry : manager.list()) {
-                    java.util.Set<java.nio.file.Path> updated = new java.util.HashSet<>(entry.editedFiles());
-                    updated.addAll(committed);
+                    java.util.Set<java.nio.file.Path> updatedEdited = new java.util.HashSet<>(entry.editedFiles());
+                    updatedEdited.addAll(committed);
+                    java.util.Set<java.nio.file.Path> updatedDirty = new java.util.HashSet<>(entry.dirtyFiles());
+                    updatedDirty.addAll(committed);
                     var updatedEntry = new com.softtek_jare.mcp.model.ProjectEntry(
                             entry.name(), entry.alias(), entry.expiryDate(),
                             entry.projectDir(), entry.launcher(), entry.model(),
                             entry.buildType(), entry.delomboked(), entry.lombokVersion(),
                             entry.originalProjectDir(), entry.originalSource(),
                             entry.sourceFingerprints(), entry.expired(), entry.editable(),
-                            entry.modulesDetected(), entry.modulesLoaded(), true,
-                            java.util.Collections.unmodifiableSet(updated));
+                            entry.modulesDetected(), entry.modulesLoaded(),
+                            java.util.Collections.unmodifiableSet(updatedDirty),
+                            java.util.Collections.unmodifiableSet(updatedEdited));
                     manager.updateEntry(updatedEntry);
                 }
                 return ok("Transaction committed. " + pending + " file(s) written atomically.");

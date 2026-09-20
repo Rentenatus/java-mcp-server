@@ -294,11 +294,22 @@ public abstract class BaseJavaTool implements McpTool {
 
 /**
  * Formats a model-dirty warning for projects with stale models after edits.
+ * Lists the per-file dirty set (file names, not full paths) so the agent can
+ * see exactly which source files are stale. Capped at 5 files per project.
  */
     protected static String formatModelDirtyWarning(ProjectManager manager) {
         List<String> dirty = new ArrayList<>();
+        java.util.Map<String, List<String>> dirtyFilesByProject = new java.util.LinkedHashMap<>();
         for (var entry : manager.list()) {
-            if (entry.modelDirty()) dirty.add(entry.name());
+            if (entry.modelDirty()) {
+                dirty.add(entry.name());
+                List<String> names = new ArrayList<>();
+                for (java.nio.file.Path p : entry.dirtyFiles()) {
+                    java.nio.file.Path fn = p.getFileName();
+                    names.add(fn != null ? fn.toString() : p.toString());
+                }
+                dirtyFilesByProject.put(entry.name(), names);
+            }
         }
         if (dirty.isEmpty()) return "";
         StringBuilder sb = new StringBuilder();
@@ -308,6 +319,18 @@ public abstract class BaseJavaTool implements McpTool {
             sb.append("`").append(dirty.get(i)).append("`");
         }
         sb.append("\n> Edits have been made since load. Data may be stale.\n");
+        for (var proj : dirtyFilesByProject.entrySet()) {
+            List<String> files = proj.getValue();
+            sb.append("> `").append(proj.getKey()).append("` — ");
+            if (files.size() <= 5) {
+                sb.append(String.join(", ", files));
+            } else {
+                sb.append(files.size()).append(" files (");
+                sb.append(String.join(", ", files.subList(0, 5)));
+                sb.append(", ...)");
+            }
+            sb.append("\n");
+        }
         sb.append("> Call `reload_java_project` to refresh the model.\n\n");
         return sb.toString();
     }

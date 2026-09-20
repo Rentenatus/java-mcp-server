@@ -62,7 +62,7 @@ class ProjectEntryTest {
             original.projectDir(), original.launcher(), original.model(),
             original.buildType(), original.delomboked(), original.lombokVersion(),
             original.originalProjectDir(), original.originalSource(),
-            original.sourceFingerprints(), true, original.editable(), 1, 1, false, java.util.Set.of()
+            original.sourceFingerprints(), true, original.editable(), 1, 1, java.util.Set.of(), java.util.Set.of()
         );
         assertFalse(expired.editable());
     }
@@ -75,7 +75,7 @@ class ProjectEntryTest {
             original.projectDir(), original.launcher(), original.model(),
             original.buildType(), original.delomboked(), original.lombokVersion(),
             original.originalProjectDir(), original.originalSource(),
-            original.sourceFingerprints(), true, original.editable(), 1, 1, false, java.util.Set.of()
+            original.sourceFingerprints(), true, original.editable(), 1, 1, java.util.Set.of(), java.util.Set.of()
         );
         assertTrue(expired.editable());
     }
@@ -86,7 +86,7 @@ class ProjectEntryTest {
             Path.of("/tmp/test"), null, null, "RAW",
             false, null,
             Path.of("/tmp/test"), "test-source",
-            Map.of(), false, editable, 1, 1, false, java.util.Set.of()
+            Map.of(), false, editable, 1, 1, java.util.Set.of(), java.util.Set.of()
         );
     }
 }

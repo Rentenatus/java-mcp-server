@@ -163,7 +163,7 @@ class FingerprintValidationTest {
             Path.of("/tmp/test"), null, null, "RAW",
             false, null,
             Path.of("/tmp/test"), "test-source",
-            fingerprints, false, true, 1, 1, false, java.util.Set.of()
+            fingerprints, false, true, 1, 1, java.util.Set.of(), java.util.Set.of()
         );
     }
 }
