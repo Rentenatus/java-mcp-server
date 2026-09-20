@@ -36,9 +36,13 @@ import com.softtek_jare.mcp.model.ProjectEntry;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 import spoon.reflect.declaration.CtType;
+import spoon.reflect.reference.CtTypeReference;
+import spoon.reflect.visitor.filter.TypeFilter;
 
 /**
  * The {@code MoveClassTool} — moves a class to a different package.
@@ -103,6 +107,14 @@ public class MoveClassTool extends BaseJavaTool {
         String newSource = source.replace("package " + oldPackage + ";",
                 "package " + newPackage + ";");
 
+        // When the moved class referenced other types from the old package
+        // (e.g. a superclass), those references were implicit (same-package).
+        // After the move they need an explicit import.
+        Set<String> importsToAdd = collectSamePackageImports(targetType, oldPackage, simpleName);
+        if (!importsToAdd.isEmpty()) {
+            newSource = insertImportsAfterPackage(newSource, importsToAdd);
+        }
+
         // Write to new location via EditManager
         Files.createDirectories(newPackageDir);
         entry = editManager.writeFile(entry, newFile, newSource, null);
@@ -149,5 +161,50 @@ public class MoveClassTool extends BaseJavaTool {
         }
         sb.append(formatMultiModuleWarning(entry));
         return ok(sb);
+    }
+
+    /**
+     * Collects fully-qualified type references that were in the same package
+     * as the moved class and now need an explicit import. Excludes the moved
+     * class itself and types that are already explicitly imported.
+     */
+    private static Set<String> collectSamePackageImports(CtType<?> targetType, String oldPackage, String simpleName) {
+        Set<String> imports = new LinkedHashSet<>();
+        String oldQualified = oldPackage + "." + simpleName;
+        for (CtTypeReference<?> ref : targetType.getElements(new TypeFilter<>(CtTypeReference.class))) {
+            if (ref.getQualifiedName() == null) continue;
+            // Skip the moved class itself
+            if (ref.getQualifiedName().equals(oldQualified)) continue;
+            // Only types from the old package need an import
+            String refPackage = ref.getPackage() != null ? ref.getPackage().getQualifiedName() : "";
+            if (!refPackage.equals(oldPackage)) continue;
+            // Skip java.lang types
+            if ("java.lang".equals(refPackage)) continue;
+            imports.add("import " + ref.getQualifiedName() + ";");
+        }
+        return imports;
+    }
+
+    /**
+     * Inserts import statements right after the package declaration, skipping
+     * any that are already present in the source.
+     */
+    private static String insertImportsAfterPackage(String source, Set<String> importsToAdd) {
+        int pkgEnd = source.indexOf(";");
+        // Find the package declaration's semicolon (first semicolon after "package")
+        int pkgStart = source.indexOf("package ");
+        if (pkgStart < 0) return source;
+        pkgEnd = source.indexOf(";", pkgStart);
+        if (pkgEnd < 0) return source;
+        pkgEnd++; // include the semicolon
+
+        StringBuilder sb = new StringBuilder(source.substring(0, pkgEnd));
+        for (String imp : importsToAdd) {
+            if (!source.contains(imp)) {
+                sb.append("\n").append(imp);
+            }
+        }
+        sb.append(source.substring(pkgEnd));
+        return sb.toString();
     }
 }

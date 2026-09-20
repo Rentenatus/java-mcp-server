@@ -300,6 +300,26 @@ class StructuralToolsTest {
     }
 
     @Test
+    void moveClassAddsImportForSamePackageSuperclass() throws Exception {
+        // When a class extends a type from its own package and is moved to a
+        // different package, an explicit import for the superclass must be added.
+        Path oldDir = srcDir.resolve("com/orig");
+        Files.createDirectories(oldDir);
+        Files.writeString(oldDir.resolve("Base.java"), "package com.orig;\n\nclass Base {}\n");
+        Files.writeString(oldDir.resolve("Child.java"), "package com.orig;\n\nclass Child extends Base {}\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+        MoveClassTool tool = new MoveClassTool(mgr, editMgr);
+
+        CallToolResult result = tool.handle(null, reqMove(entry.name(), "com.orig.Child", "com.target"));
+
+        assertFalse(result.isError(), () -> result.content().toString());
+        String childContent = Files.readString(srcDir.resolve("com/target/Child.java"));
+        assertTrue(childContent.contains("import com.orig.Base;"),
+                "moved class must import its superclass from the old package, got:\n" + childContent);
+        mgr.remove(entry.name());
+    }
+
+    @Test
     void moveClassMavenLayoutUsesSourceRoot() throws Exception {
         // Maven-style layout: sources live under src/main/java, not the project root.
         // move_class must resolve the destination against the source root, not projectDir.
