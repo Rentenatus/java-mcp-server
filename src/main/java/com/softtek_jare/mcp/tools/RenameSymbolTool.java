@@ -95,6 +95,18 @@ public class RenameSymbolTool extends BaseJavaTool {
         ProjectEntry entry = findEntry(name);
         requireEditable(entry);
 
+        // Reference-needing (global) renames scan the model's cross-file
+        // reference graph. When too many files are stale, per-file fresh-parsing
+        // for caller detection is too expensive — demand a reload instead.
+        // Declaration-only renames (updateCallers=false) only touch one file via
+        // locateFreshType and are not blocked.
+        java.util.Map<java.nio.file.Path, CtType<?>> freshTypes = java.util.Collections.emptyMap();
+        if (updateCallers) {
+            CallToolResult guard = guardStaleThreshold(entry);
+            if (guard != null) return guard;
+            freshTypes = freshTypesForDirtyFiles(entry);
+        }
+
         // Find the target type
         CtType<?> targetType = entry.model().getAllTypes().stream()
                 .filter(t -> t.getQualifiedName().equals(className))
@@ -105,11 +117,11 @@ public class RenameSymbolTool extends BaseJavaTool {
         List<Path> affectedFiles = new ArrayList<>();
 
         if ("method".equals(scope)) {
-            callersUpdated = renameMethod(entry, targetType, oldName, newName, affectedFiles, updateCallers);
+            callersUpdated = renameMethod(entry, targetType, oldName, newName, affectedFiles, updateCallers, freshTypes);
         } else if ("field".equals(scope)) {
-            callersUpdated = renameField(entry, targetType, oldName, newName, affectedFiles, updateCallers);
+            callersUpdated = renameField(entry, targetType, oldName, newName, affectedFiles, updateCallers, freshTypes);
         } else if ("class".equals(scope)) {
-            callersUpdated = renameClass(entry, targetType, oldName, newName, affectedFiles, updateCallers);
+            callersUpdated = renameClass(entry, targetType, oldName, newName, affectedFiles, updateCallers, freshTypes);
         } else {
             return domainError("DOMAIN_ERROR", "scope must be 'method', 'field', or 'class'");
         }
@@ -182,12 +194,14 @@ public class RenameSymbolTool extends BaseJavaTool {
                         .append(" — ").append(ref.context).append("\n");
             }
         }
+        if (updateCallers) sb.append(formatFreshParsedWarning(freshTypes));
         sb.append(formatMultiModuleWarning(entry));
         return ok(sb);
     }
 
     private int renameMethod(ProjectEntry entry, CtType<?> targetType, String oldName,
-                             String newName, List<Path> affectedFiles, boolean updateCallers) {
+                             String newName, List<Path> affectedFiles, boolean updateCallers,
+                             java.util.Map<java.nio.file.Path, CtType<?>> freshTypes) {
         // P48: do NOT mutate the in-memory model (setSimpleName). The actual
         // file write uses text-based replaceInCodeOnly. Model mutation leaves
         // the model inconsistent with the source files, corrupting subsequent
@@ -206,7 +220,12 @@ public class RenameSymbolTool extends BaseJavaTool {
 
         if (!updateCallers) return count;
         for (CtType<?> type : entry.model().getAllTypes()) {
-            for (CtMethod<?> method : type.getMethods()) {
+            // For stale files, scan the freshly parsed type instead of the
+            // stale model type so caller detection reflects on-disk content.
+            java.nio.file.Path tf = type.getPosition().getFile() != null
+                    ? type.getPosition().getFile().toPath().normalize() : null;
+            CtType<?> scanType = (tf != null) ? freshTypes.getOrDefault(tf, type) : type;
+            for (CtMethod<?> method : scanType.getMethods()) {
                 if (method.getBody() == null) continue;
                 List<CtInvocation<?>> invocations = method.getBody()
                         .getElements(new TypeFilter<>(CtInvocation.class));
@@ -215,8 +234,8 @@ public class RenameSymbolTool extends BaseJavaTool {
                     if (exec.getDeclaringType() != null
                             && exec.getDeclaringType().getQualifiedName().equals(targetType.getQualifiedName())
                             && exec.getSimpleName().equals(oldName)) {
-                        Path file = type.getPosition().getFile() != null
-                                ? type.getPosition().getFile().toPath() : null;
+                        Path file = scanType.getPosition().getFile() != null
+                                ? scanType.getPosition().getFile().toPath() : null;
                         if (file != null && !affectedFiles.contains(file)) {
                             affectedFiles.add(file);
                         }
@@ -229,7 +248,8 @@ public class RenameSymbolTool extends BaseJavaTool {
     }
 
     private int renameField(ProjectEntry entry, CtType<?> targetType, String oldName,
-                            String newName, List<Path> affectedFiles, boolean updateCallers) {
+                            String newName, List<Path> affectedFiles, boolean updateCallers,
+                            java.util.Map<java.nio.file.Path, CtType<?>> freshTypes) {
         // P48: do NOT mutate the in-memory model. Collect affected files only.
         int count = 0;
         for (var field : targetType.getFields()) {
@@ -244,7 +264,10 @@ public class RenameSymbolTool extends BaseJavaTool {
         }
         if (!updateCallers) return count;
         for (CtType<?> type : entry.model().getAllTypes()) {
-            for (CtMethod<?> method : type.getMethods()) {
+            java.nio.file.Path tf = type.getPosition().getFile() != null
+                    ? type.getPosition().getFile().toPath().normalize() : null;
+            CtType<?> scanType = (tf != null) ? freshTypes.getOrDefault(tf, type) : type;
+            for (CtMethod<?> method : scanType.getMethods()) {
                 if (method.getBody() == null) continue;
                 var accesses = method.getBody().getElements(
                         new TypeFilter<>(spoon.reflect.code.CtFieldAccess.class));
@@ -253,8 +276,8 @@ public class RenameSymbolTool extends BaseJavaTool {
                     if (fieldRef.getDeclaringType() != null
                             && fieldRef.getDeclaringType().getQualifiedName().equals(targetType.getQualifiedName())
                             && fieldRef.getSimpleName().equals(oldName)) {
-                        Path file = type.getPosition().getFile() != null
-                                ? type.getPosition().getFile().toPath() : null;
+                        Path file = scanType.getPosition().getFile() != null
+                                ? scanType.getPosition().getFile().toPath() : null;
                         if (file != null && !affectedFiles.contains(file)) {
                             affectedFiles.add(file);
                         }
@@ -267,7 +290,8 @@ public class RenameSymbolTool extends BaseJavaTool {
     }
 
     private int renameClass(ProjectEntry entry, CtType<?> targetType, String oldName,
-                            String newName, List<Path> affectedFiles, boolean updateCallers) {
+                            String newName, List<Path> affectedFiles, boolean updateCallers,
+                            java.util.Map<java.nio.file.Path, CtType<?>> freshTypes) {
         // P48: do NOT mutate the in-memory model. Collect affected files only.
         String oldQualifiedName = targetType.getQualifiedName();
 
@@ -278,12 +302,15 @@ public class RenameSymbolTool extends BaseJavaTool {
         int count = 1;
         if (!updateCallers) return count;
         for (CtType<?> type : entry.model().getAllTypes()) {
-            var refs = type.getElements(new TypeFilter<>(spoon.reflect.reference.CtTypeReference.class));
+            java.nio.file.Path tf = type.getPosition().getFile() != null
+                    ? type.getPosition().getFile().toPath().normalize() : null;
+            CtType<?> scanType = (tf != null) ? freshTypes.getOrDefault(tf, type) : type;
+            var refs = scanType.getElements(new TypeFilter<>(spoon.reflect.reference.CtTypeReference.class));
             for (var ref : refs) {
                 if (ref.getQualifiedName() != null
                         && ref.getQualifiedName().equals(oldQualifiedName)) {
-                    Path f = type.getPosition().getFile() != null
-                            ? type.getPosition().getFile().toPath() : null;
+                    Path f = scanType.getPosition().getFile() != null
+                            ? scanType.getPosition().getFile().toPath() : null;
                     if (f != null && !affectedFiles.contains(f)) {
                         affectedFiles.add(f);
                     }

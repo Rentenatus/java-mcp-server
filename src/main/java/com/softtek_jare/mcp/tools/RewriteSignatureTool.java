@@ -142,11 +142,17 @@ public class RewriteSignatureTool extends BaseJavaTool {
         }
 
         int callersUpdated = 0;
+        java.util.Map<java.nio.file.Path, CtType<?>> freshTypes = java.util.Collections.emptyMap();
         if (signatureChanged && "signature_and_callers".equals(mode)) {
+            // Guard: too many stale files -> demand reload instead of per-file
+            // fresh-parsing for caller detection.
+            CallToolResult guard = guardStaleThreshold(entry);
+            if (guard != null) return guard;
+            freshTypes = freshTypesForDirtyFiles(entry);
             // Update caller sites: rewrite argument lists at invocation points.
             // Only when the signature actually changed — otherwise inserting
             // TODO markers would be spurious noise at unchanged call sites.
-            callersUpdated = updateCallers(entry, targetType, methodName, target);
+            callersUpdated = updateCallers(entry, targetType, methodName, target, freshTypes);
         }
 
         StringBuilder sb = new StringBuilder();
@@ -159,6 +165,7 @@ public class RewriteSignatureTool extends BaseJavaTool {
         if (signatureChanged && "signature_and_callers".equals(mode)) {
             sb.append("Callers updated: ").append(callersUpdated).append("\n");
         }
+        if (signatureChanged && "signature_and_callers".equals(mode)) sb.append(formatFreshParsedWarning(freshTypes));
         sb.append(formatMultiModuleWarning(entry));
         return ok(sb);
     }
@@ -263,14 +270,20 @@ public class RewriteSignatureTool extends BaseJavaTool {
         return i;
     }
 
-    private int updateCallers(ProjectEntry entry, CtType<?> targetType, String methodName, CtMethod<?> target) {
+    private int updateCallers(ProjectEntry entry, CtType<?> targetType, String methodName, CtMethod<?> target,
+                              java.util.Map<java.nio.file.Path, CtType<?>> freshTypes) {
         // Collect exact call-site line numbers from the AST so TODO markers
         // are only inserted at genuine invocations of the target method, not
         // at any line that happens to contain "methodName(" (which would
         // produce false positives for same-named methods on other classes).
         java.util.Map<java.nio.file.Path, java.util.Set<Integer>> callSites = new java.util.HashMap<>();
         for (CtType<?> type : entry.model().getAllTypes()) {
-            for (CtMethod<?> method : type.getMethods()) {
+            // For stale files, scan the freshly parsed type so call-site
+            // line numbers reflect on-disk content after prior edits.
+            java.nio.file.Path tf = type.getPosition().getFile() != null
+                    ? type.getPosition().getFile().toPath().normalize() : null;
+            CtType<?> scanType = (tf != null) ? freshTypes.getOrDefault(tf, type) : type;
+            for (CtMethod<?> method : scanType.getMethods()) {
                 if (method.getBody() == null) continue;
                 var invocations = method.getBody().getElements(new TypeFilter<>(CtInvocation.class));
                 for (var inv : invocations) {
@@ -278,8 +291,8 @@ public class RewriteSignatureTool extends BaseJavaTool {
                     if (exec.getDeclaringType() != null
                             && exec.getDeclaringType().getQualifiedName().equals(targetType.getQualifiedName())
                             && exec.getSimpleName().equals(methodName)) {
-                        java.nio.file.Path f = type.getPosition().getFile() != null
-                                ? type.getPosition().getFile().toPath() : null;
+                        java.nio.file.Path f = scanType.getPosition().getFile() != null
+                                ? scanType.getPosition().getFile().toPath() : null;
                         int line = inv.getPosition().getLine();
                         if (f != null && line > 0) {
                             callSites.computeIfAbsent(f, k -> new java.util.TreeSet<>()).add(line);

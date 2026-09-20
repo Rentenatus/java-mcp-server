@@ -345,6 +345,103 @@ public abstract class BaseJavaTool implements McpTool {
                 .build();
     }
 
+    /**
+     * Maximum number of stale (dirty) source files that reference-needing
+     * edit tools (global rename, signature+callers) will re-parse on demand
+     * for caller detection before requiring a full project reload. Above this
+     * threshold, per-file fresh-parsing becomes too expensive and the tool
+     * returns a domain error pointing the agent at {@code reload_java_project}.
+     */
+    protected static final int STALE_FILE_THRESHOLD = 20;
+
+    /**
+     * Guards reference-needing operations against an excessively stale model.
+     * Returns a domain-error result the caller should return immediately when
+     * too many source files have changed since load, or {@code null} to proceed.
+     * Position-only edits (add_method, add_field, edit_line, ...) are NOT
+     * affected — they re-parse their single target file on demand and do not
+     * need the model's cross-file reference graph.
+     */
+    protected CallToolResult guardStaleThreshold(ProjectEntry entry) {
+        if (entry.dirtyFiles().size() > STALE_FILE_THRESHOLD) {
+            return domainError("MODEL_STALE",
+                    entry.dirtyFiles().size() + " source files have changed since load — too many to re-parse "
+                    + "individually for caller detection. The in-memory reference graph is stale.",
+                    ctx("staleFiles", String.valueOf(entry.dirtyFiles().size()),
+                        "threshold", String.valueOf(STALE_FILE_THRESHOLD),
+                        "suggestion", "Call reload_java_project to refresh the model, then retry the edit."));
+        }
+        return null;
+    }
+
+    /**
+     * Builds a map from normalized source-file path to a freshly parsed
+     * {@link CtType} for each file in the entry's {@code dirtyFiles}. Reference-
+     * needing tools use this to scan callers in stale files accurately without
+     * a full project reload: for each type whose source file is dirty, the
+     * fresh-parsed type replaces the stale model type during the caller scan.
+     * Returns an empty map when no files are dirty. Callers should first pass
+     * {@link #guardStaleThreshold(ProjectEntry)} to avoid re-parsing too many.
+     */
+    protected static java.util.Map<java.nio.file.Path, CtType<?>> freshTypesForDirtyFiles(ProjectEntry entry) {
+        java.util.Map<java.nio.file.Path, CtType<?>> fresh = new java.util.HashMap<>();
+        if (entry.dirtyFiles().isEmpty()) return fresh;
+        // Canonicalize dirty paths so matching tolerates path-form differences
+        // (Windows 8.3 short names, symlinks) between the dirty set (populated
+        // from writeFile, which may receive an agent-supplied path) and the
+        // model's reported file paths (resolved by Spoon).
+        java.util.Set<String> dirtyCanonical = new java.util.HashSet<>();
+        for (java.nio.file.Path dirty : entry.dirtyFiles()) {
+            dirtyCanonical.add(canonicalizePath(dirty));
+        }
+        for (CtType<?> t : entry.model().getAllTypes()) {
+            if (t.getPosition() == null || t.getPosition().getFile() == null) continue;
+            java.nio.file.Path modelFile = t.getPosition().getFile().toPath().normalize();
+            if (!dirtyCanonical.contains(canonicalizePath(modelFile))) continue;
+            CtType<?> ft = locateFreshType(modelFile, t.getQualifiedName());
+            if (ft != null) {
+                // Key by the model's normalized file path: the caller loops look
+                // up via type.getPosition().getFile().toPath().normalize(), so
+                // this key form matches their lookup.
+                fresh.put(modelFile, ft);
+            }
+        }
+        return fresh;
+    }
+
+    /**
+     * Canonicalizes a path to a real-path string for tolerant comparison,
+     * falling back to the absolute normalized string when the file does not
+     * exist (e.g. deleted) or cannot be resolved.
+     */
+    private static String canonicalizePath(java.nio.file.Path p) {
+        try {
+            return p.toRealPath().toString();
+        } catch (java.io.IOException e) {
+            return p.toAbsolutePath().normalize().toString();
+        }
+    }
+
+    /**
+     * Formats a one-line advisory noting that stale files were re-parsed on
+     * demand for caller detection, so the agent knows the model is only
+     * partially refreshed and a full reload is still needed eventually.
+     */
+    protected static String formatFreshParsedWarning(java.util.Map<java.nio.file.Path, CtType<?>> freshTypes) {
+        if (freshTypes.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        sb.append("> ⚠️ ").append(freshTypes.size()).append(" stale file(s) re-parsed on demand for caller detection: ");
+        int i = 0;
+        for (var e : freshTypes.entrySet()) {
+            if (i > 0) sb.append(", ");
+            java.nio.file.Path fn = e.getKey().getFileName();
+            sb.append(fn != null ? fn : e.getKey());
+            if (++i >= 5) { sb.append(", …"); break; }
+        }
+        sb.append(".\n> Model is partially stale — call `reload_java_project` for a full refresh.\n\n");
+        return sb.toString();
+    }
+
     private static final ObjectMapper DOMAIN_ERROR_MAPPER = new ObjectMapper();
 
     /**
