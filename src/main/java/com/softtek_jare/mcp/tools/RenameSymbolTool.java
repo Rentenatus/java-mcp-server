@@ -207,6 +207,7 @@ public class RenameSymbolTool extends BaseJavaTool {
         // the model inconsistent with the source files, corrupting subsequent
         // operations. Collect affected files only.
         int count = 0;
+        List<CtMethod<?>> targetMethods = new ArrayList<>();
         for (CtMethod<?> method : targetType.getMethods()) {
             if (method.getSimpleName().equals(oldName)) {
                 Path file = method.getPosition().getFile() != null
@@ -214,11 +215,36 @@ public class RenameSymbolTool extends BaseJavaTool {
                 if (file != null && !affectedFiles.contains(file)) {
                     affectedFiles.add(file);
                 }
+                targetMethods.add(method);
                 count++;
             }
         }
 
         if (!updateCallers) return count;
+
+        // P-rename-override: renaming a method declared in a supertype (interface,
+        // abstract class, or parent class) must also rename every overriding
+        // implementation in subtypes. The caller scan below only finds
+        // invocations; overriding declarations are not invocations, so without
+        // this scan renaming an interface method leaves @Override implementations
+        // with the old name and the code no longer compiles. Detection uses
+        // getTopDefinitions() (resolved model hierarchy) with a type-hierarchy
+        // fallback for noclasspath resolution gaps.
+        for (CtType<?> type : entry.model().getAllTypes()) {
+            if (type.equals(targetType)) continue;
+            for (CtMethod<?> method : type.getMethods()) {
+                if (!method.getSimpleName().equals(oldName)) continue;
+                if (overridesTargetMethod(method, targetMethods, targetType)) {
+                    Path file = method.getPosition().getFile() != null
+                            ? method.getPosition().getFile().toPath() : null;
+                    if (file != null && !affectedFiles.contains(file)) {
+                        affectedFiles.add(file);
+                    }
+                    count++;
+                }
+            }
+        }
+
         for (CtType<?> type : entry.model().getAllTypes()) {
             // For stale files, scan the freshly parsed type instead of the
             // stale model type so caller detection reflects on-disk content.
@@ -366,6 +392,66 @@ public class RenameSymbolTool extends BaseJavaTool {
         if (idx >= lines.length) return source;
         lines[idx] = namePattern.matcher(lines[idx]).replaceAll(newName);
         return String.join("\n", lines);
+    }
+
+    /**
+     * Returns true if {@code candidate} overrides one of {@code targets} —
+     * i.e. the candidate's resolved top-level definitions include a target
+     * method. Falls back to a type-hierarchy + signature check when
+     * {@code getTopDefinitions()} is empty (noclasspath resolution gaps).
+     */
+    private static boolean overridesTargetMethod(CtMethod<?> candidate,
+                                                List<CtMethod<?>> targets,
+                                                CtType<?> targetType) {
+        // Primary: resolved override hierarchy. getTopDefinitions() returns the
+        // actual model method objects, so reference equality is reliable.
+        for (var top : candidate.getTopDefinitions()) {
+            for (CtMethod<?> target : targets) {
+                if (top == target) return true;
+            }
+        }
+        // Fallback: getTopDefinitions() may be empty in noclasspath mode when
+        // the supertype chain did not resolve. Walk the candidate's declaring
+        // type hierarchy manually; if targetType is a supertype and the method
+        // shares name + parameter count, treat it as an override.
+        CtType<?> declType = candidate.getDeclaringType();
+        if (declType == null) return false;
+        if (!isSubtypeOf(declType, targetType.getQualifiedName())) return false;
+        for (CtMethod<?> target : targets) {
+            if (candidate.getSimpleName().equals(target.getSimpleName())
+                    && candidate.getParameters().size() == target.getParameters().size()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Walks the superclass and superinterface chain of {@code type} and returns
+     * true if a type with {@code targetQualifiedName} is found. Used by the
+     * override-detection fallback.
+     */
+    private static boolean isSubtypeOf(CtType<?> type, String targetQualifiedName) {
+        java.util.Deque<CtType<?>> stack = new java.util.ArrayDeque<>();
+        stack.push(type);
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        while (!stack.isEmpty()) {
+            CtType<?> t = stack.pop();
+            if (t == null) continue;
+            String qn = t.getQualifiedName();
+            if (qn == null) continue;
+            if (!seen.add(qn)) continue;
+            if (qn.equals(targetQualifiedName)) return true;
+            if (t.getSuperclass() != null) {
+                CtType<?> sc = t.getSuperclass().getTypeDeclaration();
+                if (sc != null) stack.push(sc);
+            }
+            for (var itf : t.getSuperInterfaces()) {
+                CtType<?> id = itf.getTypeDeclaration();
+                if (id != null) stack.push(id);
+            }
+        }
+        return false;
     }
 
 }
