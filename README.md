@@ -2,7 +2,7 @@
 
 **Version 1.0.6** — MIT License
 
-A deterministic Java code analysis server that implements the Model Context Protocol (MCP) to give AI agents precise, structured access to Java source code.
+A deterministic Java code analysis and code modification server that implements the Model Context Protocol (MCP) to give AI agents precise, structured access to Java source code.
 
 ## Why
 
@@ -30,14 +30,18 @@ When AI agents attempt to analyse or refactor Java codebases using purely textua
 - **Expiry management**: expired projects stay in memory (marked, not deleted) and can be bulk-reloaded
 - **Javadoc support**: `inspect_class`, `inspect_method`, `inspect_field`, and `list_methods` include Javadoc via `withJavadoc=true` (default)
 - **Server version**: displayed at startup and in the `check_project_dirty` status output
+- **Code modification**: 17 edit tools (13 source-editing tools plus a 4-tool transaction layer) for deterministic, AST-backed code changes. **These edit tools are currently experimental and under review.**
 
-### Available tools (29)
+### Available tools (47)
+
+#### Read-only tools (30)
 
 | Tool | Description |
 |---|---|
 | `load_java_project` | Load a Java project from a path, Git URL, or archive. Supports optional `delombok` (default true) to expose Lombok-generated members in the AST. |
 | `unload_java_project` | Unload a project and free resources |
 | `reload_java_project` | Reload a project from its original source. Supports `expired=true` to bulk-reload all expired projects. |
+| `reboot_spoon` | Discard ALL loaded projects and reset edit-manager state (transactions, backups, edit log) to recover from parse errors or a corrupted model — without restarting the JVM. Use when `reload_java_project` fails or the server is in a bad state. After reboot, no projects are loaded; call `load_java_project` to re-load. |
 | `list_loaded_projects` | List all currently loaded projects (expired projects marked with `[EXPIRED]`) |
 | `check_project_dirty` | Full-scan status tool: compares all `.java` files on disk against stored fingerprints. Detects changed, deleted, and new files. Shows MCP server version. |
 | `project_metadata` | Get metadata (name, build type, type count) |
@@ -64,6 +68,30 @@ When AI agents attempt to analyse or refactor Java codebases using purely textua
 | `find_references` | Find all references to a type, method, or field |
 | `multi_file_search` | Search for text across all loaded projects |
 | `search_source` | Search for text within the source of a specific project |
+
+#### Edit tools (17)
+
+> ⚠️ **Experimental / under review.** The edit tools below are currently experimental and under active review. Their behavior, signatures, and safety guarantees may change. Prefer creating a backup (automatic on first edit) and verify results with a read-only tool afterwards.
+
+| Tool | Description |
+|---|---|
+| `edit_line` | Replace a single line in a source file. CR-normalized matching; preserves existing line ending. |
+| `rename_symbol` | Rename a class, method, or field across every caller. Returns `unresolved_references` for string literals (reflection boundary). |
+| `replace_method_body` | Replace a method body. Exact signature match. Automatic import resolution; unresolved types block the edit. |
+| `add_method` | Add a method to a class. Erasure collision check; auto-import resolution. Detects constructors when methodName matches the class name (no return-type prefix). |
+| `add_field` | Add a field to a class. Duplicate detection; auto-import resolution for type and initializer. |
+| `remove_member` | Remove a method or field. `safe` mode refuses if references exist; `hard` mode removes and warns about dangling references. |
+| `add_annotation` | Add an annotation to a class, method, or field. Optional attributes. Validates `@Override` semantics (rejects if the method overrides nothing). |
+| `remove_annotation` | Remove an annotation. Errors if not present (no silent no-op). |
+| `edit_annotation` | Change annotation attributes. Errors if not present. |
+| `rewrite_signature` | Change return type and/or parameters. `signature_only` or `signature_and_callers` mode. |
+| `add_package` | Create a new package directory. Optionally generates `package-info.java`. |
+| `add_class` | Create a new class, enum, interface, or abstract class. Auto-import resolution for body. |
+| `move_class` | Move a class to a different package. Rewrites package declaration and updates imports across all loaded types. |
+| `begin_transaction` | Start a transaction. Subsequent edits accumulate in memory. |
+| `commit_transaction` | Write all accumulated changes atomically. All-or-nothing via temp-file + rename. |
+| `rollback_transaction` | Discard all accumulated changes. |
+| `get_edit_summary` | Return a compact summary of all edits since project load. |
 
 ## License
 
@@ -185,6 +213,18 @@ The server will listen on stdin for JSON-RPC messages and respond on stdout.
 - Every tool response includes an expiry warning when projects have expired, listing the affected project names.
 - `check_project_dirty` performs a full filesystem scan, comparing file timestamps and sizes against stored fingerprints. It detects **changed**, **deleted**, and **new** files.
 - `inspect_class`, `inspect_method`, `inspect_field`, and `list_methods` perform scoped dirty checks on the specific source files they query. They warn only when dirty (no clean confirmation — token efficiency).
+
+### Edit safety model
+
+Edit tools enforce five guarantees before any write:
+
+1. **JAR projects are immune** — edit tools refuse service with a structured error.
+2. **Optimistic locking** — every write validates the file fingerprint against disk. External changes abort the edit (no silent data loss).
+3. **Paranoia mode** — any project can be loaded with `editable=false`, even on a writable filesystem.
+4. **Backup-on-first-edit** — source files are copied to `~/.java-mcp-server/backups/` before the first edit.
+5. **Dirty detection stays intact** — fingerprints are re-set after every edit so subsequent reads see clean state.
+
+Line-ending normalization: CR characters are stripped from both file content and search strings before matching, so edits work regardless of CRLF or LF. The file's existing line ending is preserved on write.
 
 ### Javadoc support
 

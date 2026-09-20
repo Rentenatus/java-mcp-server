@@ -1,0 +1,371 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2026 Janusch Rentenatus
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+package com.softtek_jare.mcp.tools;
+
+import io.modelcontextprotocol.server.McpSyncServerExchange;
+import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
+import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
+import com.softtek_jare.mcp.edit.LineEndings;
+
+import com.softtek_jare.mcp.ProjectManager;
+import com.softtek_jare.mcp.edit.EditManager;
+import com.softtek_jare.mcp.model.ProjectEntry;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import spoon.reflect.code.CtInvocation;
+import spoon.reflect.code.CtLiteral;
+import spoon.reflect.declaration.CtMethod;
+import spoon.reflect.declaration.CtType;
+import spoon.reflect.visitor.filter.TypeFilter;
+
+/**
+ * The {@code RenameSymbolTool} — renames a method, class, or field across
+ * every caller, backed by the type-resolved AST.
+ *
+ * @author Janusch Rentenatus
+ */
+public class RenameSymbolTool extends BaseJavaTool {
+
+    private final EditManager editManager;
+
+    public RenameSymbolTool(ProjectManager manager, EditManager editManager) {
+        super(manager);
+        this.editManager = editManager;
+    }
+
+    @Override protected String toolName() { return "rename_symbol"; }
+    @Override protected String toolDescription() {
+        return "Rename a class, method, or field. By default updates every caller (global). "
+                + "Set updateCallers=false to rename only the declaration without touching call sites "
+                + "(useful for interface methods, refactoring steps, or when callers will be regenerated). "
+                + "Returns unresolved_references for string literals matching the old name (reflection boundary).";
+    }
+    @Override protected Map<String, Object> toolProperties() {
+        return Map.of(
+            "name", Map.of("type", "string", "description", "Project name or alias"),
+            "className", Map.of("type", "string", "description", "Fully qualified class name of the target"),
+            "oldName", Map.of("type", "string", "description", "Current name of the symbol"),
+            "newName", Map.of("type", "string", "description", "New name for the symbol"),
+            "scope", Map.of("type", "string", "description", "Optional: 'method', 'field', or 'class' (default: method)"),
+            "updateCallers", Map.of("type", "boolean", "description", "If true (default), update all call sites. If false, rename only the declaration.")
+        );
+    }
+    @Override protected List<String> toolRequired() { return req("name", "className", "oldName", "newName"); }
+
+    @Override
+    protected CallToolResult handle(McpSyncServerExchange exchange, CallToolRequest request) throws Exception {
+        String name = arg(request, "name");
+        String className = arg(request, "className");
+        String oldName = arg(request, "oldName");
+        String newName = arg(request, "newName");
+        String scope = arg(request, "scope");
+        if (scope == null) scope = "method";
+        boolean updateCallers = boolArg(request, "updateCallers");
+        // default: true (global rename) — only false if explicitly set
+        Object raw = request.arguments().get("updateCallers");
+        if (raw == null) updateCallers = true;
+
+        ProjectEntry entry = findEntry(name);
+        requireEditable(entry);
+
+        // Reference-needing (global) renames scan the model's cross-file
+        // reference graph. When too many files are stale, per-file fresh-parsing
+        // for caller detection is too expensive — demand a reload instead.
+        // Declaration-only renames (updateCallers=false) only touch one file via
+        // locateFreshType and are not blocked.
+        java.util.Map<java.nio.file.Path, CtType<?>> freshTypes = java.util.Collections.emptyMap();
+        if (updateCallers) {
+            CallToolResult guard = guardStaleThreshold(entry);
+            if (guard != null) return guard;
+            freshTypes = freshTypesForDirtyFiles(entry);
+        }
+
+        // Find the target type
+        CtType<?> targetType = entry.model().getAllTypes().stream()
+                .filter(t -> t.getQualifiedName().equals(className))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Type not found: " + className));
+
+        int callersUpdated = 0;
+        List<Path> affectedFiles = new ArrayList<>();
+
+        if ("method".equals(scope)) {
+            callersUpdated = renameMethod(entry, targetType, oldName, newName, affectedFiles, updateCallers, freshTypes);
+        } else if ("field".equals(scope)) {
+            callersUpdated = renameField(entry, targetType, oldName, newName, affectedFiles, updateCallers, freshTypes);
+        } else if ("class".equals(scope)) {
+            callersUpdated = renameClass(entry, targetType, oldName, newName, affectedFiles, updateCallers, freshTypes);
+        } else {
+            return domainError("DOMAIN_ERROR", "scope must be 'method', 'field', or 'class'");
+        }
+
+        // P57: declaration-only rename of overloaded methods is not safe —
+        // replaceOnLineOnly targets a single declaration line, leaving other
+        // overloads with the old name.
+        if (!updateCallers && "method".equals(scope)) {
+            long methodCount = targetType.getMethods().stream()
+                    .filter(m -> m.getSimpleName().equals(oldName)).count();
+            if (methodCount > 1) {
+                return domainError("DOMAIN_ERROR", "Cannot rename method '" + oldName + "' in declaration-only mode "
+                        + "(updateCallers=false) when overloaded methods exist (" + methodCount
+                        + " overloads). Use updateCallers=true to rename all overloads globally.");
+            }
+        }
+
+        // Write affected files via EditManager — line-aware replacement preserves formatting
+        // and skips string literals and comments to avoid corrupting them
+        java.util.regex.Pattern namePattern = java.util.regex.Pattern.compile(
+                "\\b" + java.util.regex.Pattern.quote(oldName) + "\\b");
+        for (Path file : affectedFiles) {
+            String source = LineEndings.readNormalized(file);
+            String newContent;
+            if (updateCallers) {
+                // Global: replace all code occurrences (but not strings/comments)
+                newContent = replaceInCodeOnly(source, namePattern, newName);
+            } else {
+                // P53: use fresh-parse positions for declaration line to avoid
+                // stale model positions after prior edits
+                CtType<?> freshType = locateFreshType(file, className);
+                CtType<?> posType = (freshType != null) ? freshType : targetType;
+                int declLine = getDeclarationLine(scope, posType, oldName);
+                newContent = replaceOnLineOnly(source, namePattern, newName, declLine);
+            }
+            if (!newContent.equals(source)) {
+                entry = editManager.writeFile(entry, file, newContent, null);
+                manager.updateEntry(entry);
+                editManager.logEdit(toolName() + ": " + scope + " " + oldName + " -> " + newName + " in " + className);
+            }
+        }
+
+        // For class renames, rename the source file to match the new class name
+        if ("class".equals(scope)) {
+            Path oldFile = targetType.getPosition().getFile() != null
+                    ? targetType.getPosition().getFile().toPath() : null;
+            if (oldFile != null) {
+                Path newFile = oldFile.resolveSibling(newName + ".java");
+                if (!oldFile.equals(newFile) && Files.exists(oldFile)) {
+                    Files.move(oldFile, newFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    editManager.logEdit(toolName() + ": renamed file " + oldFile.getFileName() + " -> " + newFile.getFileName());
+                }
+            }
+        }
+
+        // Scan for unresolved string-literal references
+        List<UnresolvedRef> unresolved = scanUnresolvedReferences(entry, oldName);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Renamed: ").append(oldName).append(" -> ").append(newName).append("\n");
+        sb.append("Callers updated: ").append(callersUpdated).append("\n");
+        sb.append("Files changed: ").append(affectedFiles.size()).append("\n");
+        if (!updateCallers) {
+            sb.append("Mode: declaration only (updateCallers=false). Call sites were NOT modified.\n");
+        }
+        if (!unresolved.isEmpty()) {
+            sb.append("Unresolved references (string literals):\n");
+            for (UnresolvedRef ref : unresolved) {
+                sb.append("  ").append(ref.file).append(":").append(ref.line)
+                        .append(" — ").append(ref.context).append("\n");
+            }
+        }
+        if (updateCallers) sb.append(formatFreshParsedWarning(freshTypes));
+        sb.append(formatMultiModuleWarning(entry));
+        return ok(sb);
+    }
+
+    private int renameMethod(ProjectEntry entry, CtType<?> targetType, String oldName,
+                             String newName, List<Path> affectedFiles, boolean updateCallers,
+                             java.util.Map<java.nio.file.Path, CtType<?>> freshTypes) {
+        // P48: do NOT mutate the in-memory model (setSimpleName). The actual
+        // file write uses text-based replaceInCodeOnly. Model mutation leaves
+        // the model inconsistent with the source files, corrupting subsequent
+        // operations. Collect affected files only.
+        int count = 0;
+        for (CtMethod<?> method : targetType.getMethods()) {
+            if (method.getSimpleName().equals(oldName)) {
+                Path file = method.getPosition().getFile() != null
+                        ? method.getPosition().getFile().toPath() : null;
+                if (file != null && !affectedFiles.contains(file)) {
+                    affectedFiles.add(file);
+                }
+                count++;
+            }
+        }
+
+        if (!updateCallers) return count;
+        for (CtType<?> type : entry.model().getAllTypes()) {
+            // For stale files, scan the freshly parsed type instead of the
+            // stale model type so caller detection reflects on-disk content.
+            java.nio.file.Path tf = type.getPosition().getFile() != null
+                    ? type.getPosition().getFile().toPath().normalize() : null;
+            CtType<?> scanType = (tf != null) ? freshTypes.getOrDefault(tf, type) : type;
+            for (CtMethod<?> method : scanType.getMethods()) {
+                if (method.getBody() == null) continue;
+                List<CtInvocation<?>> invocations = method.getBody()
+                        .getElements(new TypeFilter<>(CtInvocation.class));
+                for (CtInvocation<?> inv : invocations) {
+                    var exec = inv.getExecutable();
+                    if (exec.getDeclaringType() != null
+                            && exec.getDeclaringType().getQualifiedName().equals(targetType.getQualifiedName())
+                            && exec.getSimpleName().equals(oldName)) {
+                        Path file = scanType.getPosition().getFile() != null
+                                ? scanType.getPosition().getFile().toPath() : null;
+                        if (file != null && !affectedFiles.contains(file)) {
+                            affectedFiles.add(file);
+                        }
+                        count++;
+                    }
+                }
+            }
+        }
+        return count;
+    }
+
+    private int renameField(ProjectEntry entry, CtType<?> targetType, String oldName,
+                            String newName, List<Path> affectedFiles, boolean updateCallers,
+                            java.util.Map<java.nio.file.Path, CtType<?>> freshTypes) {
+        // P48: do NOT mutate the in-memory model. Collect affected files only.
+        int count = 0;
+        for (var field : targetType.getFields()) {
+            if (field.getSimpleName().equals(oldName)) {
+                Path file = field.getPosition().getFile() != null
+                        ? field.getPosition().getFile().toPath() : null;
+                if (file != null && !affectedFiles.contains(file)) {
+                    affectedFiles.add(file);
+                }
+                count++;
+            }
+        }
+        if (!updateCallers) return count;
+        for (CtType<?> type : entry.model().getAllTypes()) {
+            java.nio.file.Path tf = type.getPosition().getFile() != null
+                    ? type.getPosition().getFile().toPath().normalize() : null;
+            CtType<?> scanType = (tf != null) ? freshTypes.getOrDefault(tf, type) : type;
+            for (CtMethod<?> method : scanType.getMethods()) {
+                if (method.getBody() == null) continue;
+                var accesses = method.getBody().getElements(
+                        new TypeFilter<>(spoon.reflect.code.CtFieldAccess.class));
+                for (var fa : accesses) {
+                    var fieldRef = fa.getVariable();
+                    if (fieldRef.getDeclaringType() != null
+                            && fieldRef.getDeclaringType().getQualifiedName().equals(targetType.getQualifiedName())
+                            && fieldRef.getSimpleName().equals(oldName)) {
+                        Path file = scanType.getPosition().getFile() != null
+                                ? scanType.getPosition().getFile().toPath() : null;
+                        if (file != null && !affectedFiles.contains(file)) {
+                            affectedFiles.add(file);
+                        }
+                        count++;
+                    }
+                }
+            }
+        }
+        return count;
+    }
+
+    private int renameClass(ProjectEntry entry, CtType<?> targetType, String oldName,
+                            String newName, List<Path> affectedFiles, boolean updateCallers,
+                            java.util.Map<java.nio.file.Path, CtType<?>> freshTypes) {
+        // P48: do NOT mutate the in-memory model. Collect affected files only.
+        String oldQualifiedName = targetType.getQualifiedName();
+
+        Path file = targetType.getPosition().getFile() != null
+                ? targetType.getPosition().getFile().toPath() : null;
+        if (file != null) affectedFiles.add(file);
+
+        int count = 1;
+        if (!updateCallers) return count;
+        for (CtType<?> type : entry.model().getAllTypes()) {
+            java.nio.file.Path tf = type.getPosition().getFile() != null
+                    ? type.getPosition().getFile().toPath().normalize() : null;
+            CtType<?> scanType = (tf != null) ? freshTypes.getOrDefault(tf, type) : type;
+            var refs = scanType.getElements(new TypeFilter<>(spoon.reflect.reference.CtTypeReference.class));
+            for (var ref : refs) {
+                if (ref.getQualifiedName() != null
+                        && ref.getQualifiedName().equals(oldQualifiedName)) {
+                    Path f = scanType.getPosition().getFile() != null
+                            ? scanType.getPosition().getFile().toPath() : null;
+                    if (f != null && !affectedFiles.contains(f)) {
+                        affectedFiles.add(f);
+                    }
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    private List<UnresolvedRef> scanUnresolvedReferences(ProjectEntry entry, String oldName) {
+        List<UnresolvedRef> result = new ArrayList<>();
+        for (CtType<?> type : entry.model().getAllTypes()) {
+            var literals = type.getElements(new TypeFilter<CtLiteral<String>>(CtLiteral.class));
+            for (CtLiteral<?> lit : literals) {
+                if (lit.getValue() instanceof String s && s.contains(oldName)) {
+                    Path file = lit.getPosition().getFile() != null
+                            ? lit.getPosition().getFile().toPath() : null;
+                    int line = lit.getPosition().getLine();
+                    String context = "\"" + s + "\"";
+                    result.add(new UnresolvedRef(
+                            file != null ? file.getFileName().toString() : "unknown",
+                            line, context));
+                }
+            }
+        }
+        return result;
+    }
+
+    private record UnresolvedRef(String file, int line, String context) {}
+
+    private static int getDeclarationLine(String scope, CtType<?> targetType, String oldName) {
+        if ("method".equals(scope)) {
+            return targetType.getMethods().stream()
+                    .filter(m -> m.getSimpleName().equals(oldName))
+                    .mapToInt(m -> m.getPosition().getLine())
+                    .max().orElse(1);
+        } else if ("field".equals(scope)) {
+            return targetType.getFields().stream()
+                    .filter(f -> f.getSimpleName().equals(oldName))
+                    .mapToInt(f -> f.getPosition().getLine())
+                    .max().orElse(1);
+        } else {
+            return targetType.getPosition().getLine();
+        }
+    }
+
+    private static String replaceOnLineOnly(String source, java.util.regex.Pattern namePattern,
+                                            String newName, int declLine) {
+        if (declLine < 1) return source;
+        String[] lines = source.split("\n", -1);
+        int idx = declLine - 1; // 0-indexed
+        if (idx >= lines.length) return source;
+        lines[idx] = namePattern.matcher(lines[idx]).replaceAll(newName);
+        return String.join("\n", lines);
+    }
+
+}

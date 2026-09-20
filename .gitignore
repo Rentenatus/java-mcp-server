@@ -37,3 +37,6 @@ build/
 
 ### GenAI ###
 AGENTS.md
+
+### Spoon ###
+spoon.classpath-app.tmp
