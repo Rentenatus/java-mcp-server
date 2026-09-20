@@ -30,17 +30,18 @@ When AI agents attempt to analyse or refactor Java codebases using purely textua
 - **Expiry management**: expired projects stay in memory (marked, not deleted) and can be bulk-reloaded
 - **Javadoc support**: `inspect_class`, `inspect_method`, `inspect_field`, and `list_methods` include Javadoc via `withJavadoc=true` (default)
 - **Server version**: displayed at startup and in the `check_project_dirty` status output
-- **Code modification**: 13 edit tools for deterministic, AST-backed code changes plus a transaction layer for atomic multi-file edits
+- **Code modification**: 17 edit tools (13 source-editing tools plus a 4-tool transaction layer) for deterministic, AST-backed code changes. **These edit tools are currently experimental and under review.**
 
-### Available tools (46)
+### Available tools (47)
 
-#### Read-only tools (29)
+#### Read-only tools (30)
 
 | Tool | Description |
 |---|---|
 | `load_java_project` | Load a Java project from a path, Git URL, or archive. Supports optional `delombok` (default true) to expose Lombok-generated members in the AST. |
 | `unload_java_project` | Unload a project and free resources |
 | `reload_java_project` | Reload a project from its original source. Supports `expired=true` to bulk-reload all expired projects. |
+| `reboot_spoon` | Discard ALL loaded projects and reset edit-manager state (transactions, backups, edit log) to recover from parse errors or a corrupted model — without restarting the JVM. Use when `reload_java_project` fails or the server is in a bad state. After reboot, no projects are loaded; call `load_java_project` to re-load. |
 | `list_loaded_projects` | List all currently loaded projects (expired projects marked with `[EXPIRED]`) |
 | `check_project_dirty` | Full-scan status tool: compares all `.java` files on disk against stored fingerprints. Detects changed, deleted, and new files. Shows MCP server version. |
 | `project_metadata` | Get metadata (name, build type, type count) |
@@ -69,6 +70,8 @@ When AI agents attempt to analyse or refactor Java codebases using purely textua
 | `search_source` | Search for text within the source of a specific project |
 
 #### Edit tools (17)
+
+> ⚠️ **Experimental / under review.** The edit tools below are currently experimental and under active review. Their behavior, signatures, and safety guarantees may change. Prefer creating a backup (automatic on first edit) and verify results with a read-only tool afterwards.
 
 | Tool | Description |
 |---|---|
