@@ -204,7 +204,8 @@ class DebugEditToolsTest {
                 "methodName", "foo", "returnType", "void",
                 "parameters", "int x, Pair<K,V> m")));
 
-        boolean isClash = r.isError() && r.content().toString().contains("erasure");
+        boolean isClash = !r.isError() && r.content().toString().contains("isDomainError")
+                && r.content().toString().contains("erasure");
         report("P31 generic comma param erasure clash", isClash,
                 "isError=" + r.isError() + ", content=" + r.content());
         mgr.remove(entry.name());
@@ -222,7 +223,8 @@ class DebugEditToolsTest {
                 "name", entry.name(), "className", "A",
                 "targetType", "bogus", "annotation", "Override")));
 
-        boolean rejected = r.isError() && r.content().toString().contains("targetType must be");
+        boolean rejected = !r.isError() && r.content().toString().contains("isDomainError")
+                && r.content().toString().contains("targetType must be");
         report("P30 invalid targetType rejected", rejected,
                 "isError=" + r.isError() + ", content=" + r.content());
         mgr.remove(entry.name());
@@ -240,7 +242,7 @@ class DebugEditToolsTest {
                 "name", entry.name(), "className", "D",
                 "methodName", "process", "returnType", "LocalDateTime")));
 
-        boolean msgOk = r.isError()
+        boolean msgOk = !r.isError() && r.content().toString().contains("isDomainError")
                 && r.content().toString().contains("signature or body");
         report("P32 error message says 'signature or body'", msgOk,
                 "isError=" + r.isError() + ", content=" + r.content());

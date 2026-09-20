@@ -233,8 +233,10 @@ class EditToolBugsReproTest {
 
         CallToolResult result = tool.handle(null, annoReq(
                 entry.name(), "method", "Solo", "getWinSymbol", "Override", null));
-        assertTrue(result.isError(),
+        assertFalse(result.isError(),
                 "@Override on a non-overriding method must be rejected, got: " + result.content().toString());
+        assertTrue(result.content().toString().contains("isDomainError"),
+                "Expected domain error for invalid @Override, got: " + result.content().toString());
         mgr.remove(entry.name());
     }
 

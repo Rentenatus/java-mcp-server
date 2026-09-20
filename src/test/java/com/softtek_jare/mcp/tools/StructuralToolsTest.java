@@ -213,7 +213,8 @@ class StructuralToolsTest {
 
         CallToolResult result = tool.handle(null, reqClass(entry.name(), "", "Existing", "class", null));
 
-        assertTrue(result.isError());
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
         mgr.remove(entry.name());
     }
 

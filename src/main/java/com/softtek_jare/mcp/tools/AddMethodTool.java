@@ -110,7 +110,10 @@ public class AddMethodTool extends BaseJavaTool {
         // Erasure check
         var clash = new TypeErasureChecker().checkErasure(targetType, methodName, paramTypes);
         if (clash.clash()) {
-            return error(clash.message());
+            return domainError("ERASURE_COLLISION", clash.message(),
+                    ctx("className", className, "methodName", methodName,
+                        "parameters", parameters, "returnType", returnType,
+                        "suggestion", "Change the method signature to avoid erasure collision with an existing method."));
         }
 
         // Auto-import resolution for return type, parameters, and body.
@@ -125,8 +128,13 @@ public class AddMethodTool extends BaseJavaTool {
         }
         var importResult = new AutoImportResolver().resolve(entry, targetType, importCheckText.toString());
         if (!importResult.unresolvedTypes().isEmpty()) {
-            return error("Cannot resolve type(s) in method signature or body: " + importResult.unresolvedTypes()
-                    + ". Provide the fully qualified name or add the dependency.");
+            return domainError("UNRESOLVED_TYPES",
+                    "Cannot resolve type(s) in method signature or body: " + importResult.unresolvedTypes()
+                    + ". Provide the fully qualified name or add the dependency.",
+                    ctx("className", className, "methodName", methodName,
+                        "returnType", returnType, "parameters", parameters,
+                        "unresolvedTypes", importResult.unresolvedTypes().toString(),
+                        "suggestion", "Use fully qualified names (e.g. java.awt.Color) or load the dependency."));
         }
 
         // Build method source string. Members live one indent level inside the
@@ -185,14 +193,20 @@ public class AddMethodTool extends BaseJavaTool {
         // Insert before last closing brace of the class
         Path file = targetType.getPosition().getFile() != null
                 ? targetType.getPosition().getFile().toPath() : null;
-        if (file == null) return error("Cannot determine source file.");
+        if (file == null) return domainError("NO_SOURCE_FILE",
+                "Cannot determine source file for class '" + className + "'.",
+                ctx("className", className, "methodName", methodName));
 
         String source = LineEndings.readNormalized(file);
         // P42: use fresh-parse endLine to avoid stale positions after prior edits
         CtType<?> freshType = locateFreshType(file, className);
         int endLine = (freshType != null) ? freshType.getPosition().getEndLine() : targetType.getPosition().getEndLine();
         int lastBrace = findClassClosingBrace(source, endLine);
-        if (lastBrace < 0) return error("Malformed source: no closing brace found.");
+        if (lastBrace < 0) return domainError("MALFORMED_SOURCE",
+                "Malformed source: no closing brace found in " + file.getFileName() + ".",
+                ctx("className", className, "methodName", methodName,
+                    "filePath", file.toString(),
+                    "suggestion", "Check the source file for syntax errors and reload the project."));
 
         String newContent = source.substring(0, lastBrace)
                 + methodSrc + "\n"

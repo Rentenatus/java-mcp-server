@@ -91,7 +91,10 @@ public class AddFieldTool extends BaseJavaTool {
         // Check for existing field with same name
         for (var field : targetType.getFields()) {
             if (field.getSimpleName().equals(fieldName)) {
-                return error("Field '" + fieldName + "' already exists in class " + targetType.getSimpleName());
+                return domainError("FIELD_EXISTS",
+                        "Field '" + fieldName + "' already exists in class " + targetType.getSimpleName(),
+                        ctx("className", className, "fieldName", fieldName,
+                            "suggestion", "Use a different field name or remove the existing field first."));
             }
         }
 
@@ -102,8 +105,12 @@ public class AddFieldTool extends BaseJavaTool {
         }
         var importResult = new AutoImportResolver().resolve(entry, targetType, checkText);
         if (!importResult.unresolvedTypes().isEmpty()) {
-            return error("Cannot resolve type(s) in field declaration: " + importResult.unresolvedTypes()
-                    + ". Provide the fully qualified name or add the dependency.");
+            return domainError("UNRESOLVED_TYPES",
+                    "Cannot resolve type(s) in field declaration: " + importResult.unresolvedTypes()
+                    + ". Provide the fully qualified name or add the dependency.",
+                    ctx("className", className, "fieldName", fieldName, "type", type,
+                        "unresolvedTypes", importResult.unresolvedTypes().toString(),
+                        "suggestion", "Use fully qualified names (e.g. java.awt.Color) or load the dependency."));
         }
 
         // Build field source
@@ -120,14 +127,20 @@ public class AddFieldTool extends BaseJavaTool {
         // Insert before last closing brace
         Path file = targetType.getPosition().getFile() != null
                 ? targetType.getPosition().getFile().toPath() : null;
-        if (file == null) return error("Cannot determine source file.");
+        if (file == null) return domainError("NO_SOURCE_FILE",
+                "Cannot determine source file for class '" + className + "'.",
+                ctx("className", className, "fieldName", fieldName));
 
         String source = LineEndings.readNormalized(file);
         // P43: use fresh-parse endLine to avoid stale positions after prior edits
         CtType<?> freshType = locateFreshType(file, className);
         int endLine = (freshType != null) ? freshType.getPosition().getEndLine() : targetType.getPosition().getEndLine();
         int lastBrace = findClassClosingBrace(source, endLine);
-        if (lastBrace < 0) return error("Malformed source: no closing brace found.");
+        if (lastBrace < 0) return domainError("MALFORMED_SOURCE",
+                "Malformed source: no closing brace found in " + file.getFileName() + ".",
+                ctx("className", className, "fieldName", fieldName,
+                    "filePath", file.toString(),
+                    "suggestion", "Check the source file for syntax errors and reload the project."));
 
         String newContent = source.substring(0, lastBrace)
                 + "    " + fieldSrc + "\n"

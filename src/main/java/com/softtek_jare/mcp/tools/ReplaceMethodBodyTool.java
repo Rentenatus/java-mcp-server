@@ -100,7 +100,7 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
                 .collect(Collectors.toList());
 
         if (candidates.isEmpty()) {
-            return error("No method named '" + methodName + "' found in class " + targetType.getSimpleName());
+            return domainError("DOMAIN_ERROR", "No method named '" + methodName + "' found in class " + targetType.getSimpleName());
         }
 
         CtMethod<?> target = null;
@@ -113,14 +113,14 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
                 }
             }
             if (target == null) {
-                return error("No method matching signature '" + methodName + "(" + signature + ")' found in class "
+                return domainError("DOMAIN_ERROR", "No method matching signature '" + methodName + "(" + signature + ")' found in class "
                         + targetType.getSimpleName() + ". Available: " + listAvailableSignatures(candidates));
             }
         } else {
             if (candidates.size() == 1) {
                 target = candidates.get(0);
             } else {
-                return error("Multiple methods named '" + methodName + "' found. Specify signature. Available: "
+                return domainError("DOMAIN_ERROR", "Multiple methods named '" + methodName + "' found. Specify signature. Available: "
                         + listAvailableSignatures(candidates));
             }
         }
@@ -128,7 +128,7 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
         // Auto-import resolution
         var importResult = importResolver.resolve(entry, targetType, newBody);
         if (!importResult.unresolvedTypes().isEmpty()) {
-            return error("Cannot resolve type(s) in method body: " + importResult.unresolvedTypes()
+            return domainError("DOMAIN_ERROR", "Cannot resolve type(s) in method body: " + importResult.unresolvedTypes()
                     + ". No matching import found in project or declared dependencies. "
                     + "Provide the fully qualified name or add the dependency.");
         }
@@ -137,7 +137,7 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
         Path file = targetType.getPosition().getFile() != null
                 ? targetType.getPosition().getFile().toPath() : null;
         if (file == null) {
-            return error("Cannot determine source file for class " + targetType.getSimpleName());
+            return domainError("DOMAIN_ERROR", "Cannot determine source file for class " + targetType.getSimpleName());
         }
 
         // The in-memory model may be stale: prior edits in this session can shift
@@ -145,13 +145,13 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
         // wrong brace and corrupt the method (insert instead of replace, see P37).
         // Re-parse the current on-disk file to obtain accurate body positions.
         if (target.getBody() == null) {
-            return error("Method '" + methodName + "' has no body (abstract or interface method). "
+            return domainError("DOMAIN_ERROR", "Method '" + methodName + "' has no body (abstract or interface method). "
                     + "Cannot replace body of a method without one.");
         }
         CtMethod<?> freshMethod = locateFreshMethod(file, className, methodName, signature);
         CtMethod<?> posMethod = (freshMethod != null && freshMethod.getBody() != null) ? freshMethod : target;
         if (posMethod.getBody() == null) {
-            return error("Method '" + methodName + "' has no body (abstract or interface method). "
+            return domainError("DOMAIN_ERROR", "Method '" + methodName + "' has no body (abstract or interface method). "
                     + "Cannot replace body of a method without one.");
         }
         int bodyStartLine = posMethod.getBody().getPosition().getLine();

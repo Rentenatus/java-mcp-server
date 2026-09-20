@@ -93,17 +93,17 @@ public class ReloadJavaProjectTool extends BaseJavaTool {
                     }
                 }
             } catch (ProjectLoadException e) {
-                return error("Reload failed: " + e.getMessage());
+                return domainError("DOMAIN_ERROR", "Reload failed: " + e.getMessage());
             }
         } else {
             if (name == null || name.isBlank()) {
-                return error("Parameter 'name' is required when expired is false or not set.");
+                return domainError("DOMAIN_ERROR", "Parameter 'name' is required when expired is false or not set.");
             }
             try {
                 var entry = manager.reload(name);
                 reloadedNames.add(entry.name());
             } catch (ProjectLoadException e) {
-                return error("Reload failed: " + e.getMessage());
+                return domainError("DOMAIN_ERROR", "Reload failed: " + e.getMessage());
             }
         }
 

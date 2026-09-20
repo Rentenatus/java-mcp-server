@@ -59,7 +59,7 @@ public class TransactionTools extends BaseJavaTool {
 
     @Override
     protected CallToolResult handle(McpSyncServerExchange exchange, CallToolRequest request) {
-        return error("Use specific transaction tool instances");
+        return domainError("DOMAIN_ERROR", "Use specific transaction tool instances");
     }
 
     // --- Individual tool classes ---
@@ -90,7 +90,7 @@ public class TransactionTools extends BaseJavaTool {
         @Override protected List<String> toolRequired() { return List.of(); }
         @Override protected CallToolResult handle(McpSyncServerExchange ex, CallToolRequest req) throws Exception {
             if (!editManager.isInTransaction()) {
-                return error("No active transaction. Call begin_transaction first.");
+                return domainError("DOMAIN_ERROR", "No active transaction. Call begin_transaction first.");
             }
             int pending = editManager.getPendingChangeCount();
             boolean success = editManager.commitTransaction();
@@ -116,7 +116,7 @@ public class TransactionTools extends BaseJavaTool {
                 }
                 return ok("Transaction committed. " + pending + " file(s) written atomically.");
             } else {
-                return error("Commit failed. All temp files cleaned up. Transaction is still open — "
+                return domainError("DOMAIN_ERROR", "Commit failed. All temp files cleaned up. Transaction is still open — "
                         + "fix the issue and retry, or call rollback_transaction.");
             }
         }
@@ -133,7 +133,7 @@ public class TransactionTools extends BaseJavaTool {
         @Override protected List<String> toolRequired() { return List.of(); }
         @Override protected CallToolResult handle(McpSyncServerExchange ex, CallToolRequest req) {
             if (!editManager.isInTransaction()) {
-                return error("No active transaction to roll back.");
+                return domainError("DOMAIN_ERROR", "No active transaction to roll back.");
             }
             editManager.rollbackTransaction();
             return ok("Transaction rolled back. All pending changes discarded.");

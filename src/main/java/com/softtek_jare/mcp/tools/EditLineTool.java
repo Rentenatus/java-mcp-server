@@ -81,9 +81,9 @@ public class EditLineTool extends BaseJavaTool {
         try {
             lineNumber = Integer.parseInt(String.valueOf(request.arguments().get("lineNumber")));
         } catch (NumberFormatException e) {
-            return error("lineNumber must be an integer");
+            return domainError("DOMAIN_ERROR", "lineNumber must be an integer");
         }
-        if (lineNumber < 1) return error("lineNumber must be >= 1");
+        if (lineNumber < 1) return domainError("DOMAIN_ERROR", "lineNumber must be >= 1");
 
         String newContent = arg(request, "newContent");
         if (newContent == null) newContent = "";
@@ -93,7 +93,7 @@ public class EditLineTool extends BaseJavaTool {
 
         Path file = resolveFile(entry, filePath);
         if (!Files.exists(file)) {
-            return error("File not found: " + file);
+            return domainError("DOMAIN_ERROR", "File not found: " + file);
         }
 
         // Read, normalize CR, split into lines
@@ -101,7 +101,7 @@ public class EditLineTool extends BaseJavaTool {
         String[] lines = normalized.split("\n", -1);
 
         if (lineNumber > lines.length) {
-            return error("File has " + lines.length + " line(s); cannot replace line " + lineNumber);
+            return domainError("DOMAIN_ERROR", "File has " + lines.length + " line(s); cannot replace line " + lineNumber);
         }
 
         // Normalize CR from newContent as well

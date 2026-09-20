@@ -102,7 +102,7 @@ public class GetFileContentTool extends BaseJavaTool {
         }
 
         if (filePath == null || !Files.exists(filePath)) {
-            return error("Could not locate source file for " + className);
+            return domainError("DOMAIN_ERROR", "Could not locate source file for " + className);
         }
 
         try {
@@ -116,7 +116,7 @@ public class GetFileContentTool extends BaseJavaTool {
             sb.append("```");
             return ok(sb);
         } catch (Exception e) {
-            return error("Failed to read file: " + e.getMessage());
+            return domainError("DOMAIN_ERROR", "Failed to read file: " + e.getMessage());
         }
     }
 }

@@ -83,7 +83,7 @@ public class ListConstructorsTool extends BaseJavaTool {
                 .orElseThrow(() -> new IllegalArgumentException("Class not found: " + className));
 
         if (!type.isClass()) {
-            return error("'" + className + "' is not a class (no constructors).");
+            return domainError("DOMAIN_ERROR", "'" + className + "' is not a class (no constructors).");
         }
 
         StringBuilder sb = new StringBuilder();

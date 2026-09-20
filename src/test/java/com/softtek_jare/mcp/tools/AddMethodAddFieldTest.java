@@ -98,7 +98,8 @@ class AddMethodAddFieldTest {
         CallToolResult result = addMethod.handle(null, methodReq(
                 entry.name(), "C", "foo", "void", "int y", null, null));
 
-        assertTrue(result.isError());
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
         assertTrue(result.content().toString().contains("erasure"));
         mgr.remove(entry.name());
     }
@@ -113,7 +114,8 @@ class AddMethodAddFieldTest {
                 entry.name(), "D", "process", "void", null, "public",
                 "LocalDateTime now = LocalDateTime.now();"));
 
-        assertTrue(result.isError());
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
         mgr.remove(entry.name());
     }
 
@@ -141,7 +143,8 @@ class AddMethodAddFieldTest {
         CallToolResult result = addField.handle(null, fieldReq(
                 entry.name(), "E", "x", "int", null, null));
 
-        assertTrue(result.isError());
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
         mgr.remove(entry.name());
     }
 
@@ -154,7 +157,8 @@ class AddMethodAddFieldTest {
         CallToolResult result = addField.handle(null, fieldReq(
                 entry.name(), "F", "when", "LocalDateTime", null, null));
 
-        assertTrue(result.isError());
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
         mgr.remove(entry.name());
     }
 
@@ -172,7 +176,8 @@ class AddMethodAddFieldTest {
         CallToolResult result = addMethod.handle(null, methodReq(
                 entry.name(), "G", "foo", "void", "int x, Pair<K,V> m", null, null));
 
-        assertTrue(result.isError());
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
         assertTrue(result.content().toString().contains("erasure"),
                 "expected erasure clash, got: " + result.content());
         mgr.remove(entry.name());

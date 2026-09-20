@@ -85,7 +85,7 @@ public class GetAnnotationDetailsTool extends BaseJavaTool {
                 .orElseThrow(() -> new IllegalArgumentException("Annotation type not found: " + className));
 
         if (!type.isAnnotationType()) {
-            return error("'" + className + "' is not an annotation type.");
+            return domainError("DOMAIN_ERROR", "'" + className + "' is not an annotation type.");
         }
 
         CtAnnotationType<?> annType = (CtAnnotationType<?>) type;

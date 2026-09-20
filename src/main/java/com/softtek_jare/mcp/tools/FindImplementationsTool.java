@@ -81,7 +81,7 @@ public class FindImplementationsTool extends BaseJavaTool {
                 .orElseThrow(() -> new IllegalArgumentException("Type not found: " + className));
 
         if (!targetType.isInterface() && !targetType.isAbstract()) {
-            return error("'" + className + "' is neither an interface nor an abstract class.");
+            return domainError("DOMAIN_ERROR", "'" + className + "' is neither an interface nor an abstract class.");
         }
 
         List<String> implementations = new ArrayList<>();

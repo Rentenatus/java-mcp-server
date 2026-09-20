@@ -107,13 +107,13 @@ public class RemoveMemberTool extends BaseJavaTool {
                     .append(" reference(s) found:\n");
             for (String ref : references) sb.append("  ").append(ref).append("\n");
             sb.append("Use mode='hard' to remove anyway (dangling references will break compilation).");
-            return error(sb.toString());
+            return domainError("DOMAIN_ERROR", sb.toString());
         }
 
         // Remove the member via text manipulation
         Path file = targetType.getPosition().getFile() != null
                 ? targetType.getPosition().getFile().toPath() : null;
-        if (file == null) return error("Cannot determine source file.");
+        if (file == null) return domainError("DOMAIN_ERROR", "Cannot determine source file.");
 
         String source = LineEndings.readNormalized(file);
         // P45: use fresh-parse positions to avoid stale line numbers after prior edits
@@ -126,7 +126,7 @@ public class RemoveMemberTool extends BaseJavaTool {
                     .filter(m -> m.getSimpleName().equals(memberName))
                     .collect(java.util.stream.Collectors.toList());
             if (matching.isEmpty()) {
-                return error("Method '" + memberName + "' not found in " + className);
+                return domainError("DOMAIN_ERROR", "Method '" + memberName + "' not found in " + className);
             }
             CtMethod<?> method;
             if (signature != null && !signature.isBlank()) {
@@ -135,13 +135,13 @@ public class RemoveMemberTool extends BaseJavaTool {
                         .filter(m -> paramsMatch(m, sigParams))
                         .findFirst().orElse(null);
                 if (method == null) {
-                    return error("No method matching signature '" + memberName + "(" + signature
+                    return domainError("DOMAIN_ERROR", "No method matching signature '" + memberName + "(" + signature
                             + ")' found in " + className);
                 }
             } else if (matching.size() == 1) {
                 method = matching.get(0);
             } else {
-                return error("Multiple methods named '" + memberName + "' in " + className
+                return domainError("DOMAIN_ERROR", "Multiple methods named '" + memberName + "' in " + className
                         + ". Provide the 'signature' parameter to disambiguate.");
             }
             newSource = removeMethodByPosition(source, method);
@@ -151,14 +151,14 @@ public class RemoveMemberTool extends BaseJavaTool {
                     .findFirst()
                     .orElse(null);
             if (field == null) {
-                return error("Field '" + memberName + "' not found in " + className);
+                return domainError("DOMAIN_ERROR", "Field '" + memberName + "' not found in " + className);
             }
             newSource = removeFieldByPosition(source, field);
         } else {
-            return error("scope must be 'method' or 'field'");
+            return domainError("DOMAIN_ERROR", "scope must be 'method' or 'field'");
         }
         if (newSource.equals(source)) {
-            return error("Member '" + memberName + "' not found in source.");
+            return domainError("DOMAIN_ERROR", "Member '" + memberName + "' not found in source.");
         }
 
         entry = editManager.writeFile(entry, file, newSource, null);

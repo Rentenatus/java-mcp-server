@@ -122,7 +122,8 @@ class ReplaceMethodBodyToolTest {
         CallToolResult result = tool.handle(null, mockRequest(
                 entry.name(), "X", "nonExistent", null, "return 0;"));
 
-        assertTrue(result.isError());
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
         mgr.remove(entry.name());
     }
 
@@ -140,7 +141,8 @@ class ReplaceMethodBodyToolTest {
         CallToolResult result = tool.handle(null, mockRequest(
                 entry.name(), "Overload", "doWork", null, "return 0;"));
 
-        assertTrue(result.isError());
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
         mgr.remove(entry.name());
     }
 
@@ -153,7 +155,8 @@ class ReplaceMethodBodyToolTest {
         CallToolResult result = tool.handle(null, mockRequest(
                 entry.name(), "Y", "getValue", null, "LocalDateTime now = LocalDateTime.now(); return 0;"));
 
-        assertTrue(result.isError());
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
         mgr.remove(entry.name());
     }
 

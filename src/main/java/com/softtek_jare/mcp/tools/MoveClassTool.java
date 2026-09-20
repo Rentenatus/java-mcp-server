@@ -84,7 +84,7 @@ public class MoveClassTool extends BaseJavaTool {
 
         Path oldFile = targetType.getPosition().getFile() != null
                 ? targetType.getPosition().getFile().toPath() : null;
-        if (oldFile == null) return error("Cannot determine source file.");
+        if (oldFile == null) return domainError("DOMAIN_ERROR", "Cannot determine source file.");
 
         String oldPackage = targetType.getPackage() != null
                 ? targetType.getPackage().getQualifiedName() : "";
@@ -92,7 +92,7 @@ public class MoveClassTool extends BaseJavaTool {
 
         Path srcDir = entry.projectDir();
         if (srcDir == null) srcDir = entry.originalProjectDir();
-        if (srcDir == null) return error("Cannot determine source directory.");
+        if (srcDir == null) return domainError("DOMAIN_ERROR", "Cannot determine source directory.");
 
         Path newPackageDir = srcDir.resolve(newPackage.replace(".", "/"));
         Path newFile = newPackageDir.resolve(simpleName + ".java");

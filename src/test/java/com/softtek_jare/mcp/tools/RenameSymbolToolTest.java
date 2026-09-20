@@ -221,7 +221,8 @@ class RenameSymbolToolTest {
         CallToolResult result = tool.handle(null, mockRequestDeclOnly(
                 entry.name(), "Over", "process", "execute", "method"));
 
-        assertTrue(result.isError());
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
         assertTrue(result.content().toString().contains("overloaded"));
         mgr.remove(entry.name());
     }

@@ -77,7 +77,10 @@ public class AddClassTool extends BaseJavaTool {
         if (type == null) type = "class";
         if (!type.equals("class") && !type.equals("enum")
                 && !type.equals("interface") && !type.equals("abstract")) {
-            return error("type must be 'class', 'enum', 'interface', or 'abstract' (got: " + type + ")");
+            return domainError("INVALID_TYPE",
+                    "type must be 'class', 'enum', 'interface', or 'abstract' (got: " + type + ")",
+                    ctx("packageName", packageName, "className", className, "type", type,
+                        "validTypes", "class, enum, interface, abstract"));
         }
 
         ProjectEntry entry = findEntry(name);
@@ -88,13 +91,20 @@ public class AddClassTool extends BaseJavaTool {
             srcDir = entry.projectDir();
             if (srcDir == null) srcDir = entry.originalProjectDir();
         }
-        if (srcDir == null) return error("Cannot determine source directory.");
+        if (srcDir == null) return domainError("NO_SOURCE_DIR",
+                "Cannot determine source directory for project '" + name + "'.",
+                ctx("projectName", name, "packageName", packageName, "className", className,
+                    "suggestion", "Ensure the project was loaded from a directory with a recognized source root."));
 
         Path packageDir = srcDir.resolve(packageName.replace(".", "/"));
         Path file = packageDir.resolve(className + ".java");
         log.info("add_class: srcRoot={}, packageDir={}, file={}", srcDir, packageDir, file);
         if (Files.exists(file)) {
-            return error("Class '" + className + "' already exists at " + file);
+            return domainError("CLASS_EXISTS",
+                    "Class '" + className + "' already exists at " + file,
+                    ctx("packageName", packageName, "className", className,
+                        "filePath", file.toString(),
+                        "suggestion", "Use a different class name or remove the existing file first."));
         }
         Files.createDirectories(packageDir);
 
@@ -103,8 +113,13 @@ public class AddClassTool extends BaseJavaTool {
         if (body != null && !body.isBlank()) {
             importResult = new AutoImportResolver().resolve(entry, null, body);
             if (!importResult.unresolvedTypes().isEmpty()) {
-                return error("Cannot resolve type(s) in body: " + importResult.unresolvedTypes()
-                        + ". Provide the fully qualified name or add the dependency.");
+                return domainError("UNRESOLVED_TYPES",
+                        "Cannot resolve type(s) in body: " + importResult.unresolvedTypes()
+                        + ". Provide the fully qualified name or add the dependency.",
+                        ctx("packageName", packageName, "className", className,
+                            "unresolvedTypes", importResult.unresolvedTypes().toString(),
+                            "body", body,
+                            "suggestion", "Use fully qualified names (e.g. java.awt.Color) or load the dependency."));
             }
         }
 

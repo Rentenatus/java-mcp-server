@@ -33,6 +33,7 @@ import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import com.softtek_jare.mcp.ProjectManager;
 import com.softtek_jare.mcp.model.ProjectEntry;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
@@ -42,6 +43,9 @@ import com.softtek_jare.mcp.model.Fingerprint;
 import spoon.reflect.declaration.CtType;
 import spoon.reflect.declaration.CtMethod;
 import spoon.reflect.declaration.CtField;
+
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -102,8 +106,8 @@ public abstract class BaseJavaTool implements McpTool {
                 expiredNames = manager.markExpired();
                 return handle(exchange, request);
             } catch (IllegalArgumentException e) {
-                log.warn("Tool {} error: {}", toolName(), e.getMessage());
-                return error(e.getMessage());
+                log.warn("Tool {} domain error: {}", toolName(), e.getMessage());
+                return domainError("DOMAIN_ERROR", e.getMessage(), (Map<String, Object>) null);
             } catch (Exception e) {
                 log.error("Unexpected error in tool {}", toolName(), e);
                 return error("internal error: " + e.getMessage());
@@ -316,6 +320,97 @@ public abstract class BaseJavaTool implements McpTool {
                 .addTextContent("Error: " + message)
                 .isError(true)
                 .build();
+    }
+
+    private static final ObjectMapper DOMAIN_ERROR_MAPPER = new ObjectMapper();
+
+    /**
+     * Builds a <strong>domain error</strong> result — a structured, agent-readable
+     * answer for a <em>fachlichen</em> Fehler (Spoon parse error, type not found,
+     * duplicate annotation, invalid {@code @Override}, fingerprint mismatch, etc.).
+     *
+     * <p>Grundsatz: Kein Fehler von Spoon, Java-Parsen oder Java-Schreiben darf
+     * als edit-tool-fehler ({@code isError=true}) zurückkommen. Domain errors
+     * return {@code isError=false} with a JSON payload so the agent can inspect
+     * the attributes and decide what to do next.
+     *
+     * <p>The JSON payload contains:
+     * <ul>
+     *   <li>{@code error} — always {@code false} (not a protocol error)</li>
+     *   <li>{@code isDomainError} — always {@code true}</li>
+     *   <li>{@code errorType} — a stable enum-like string (e.g. {@code "TYPE_NOT_FOUND"},
+     *       {@code "DUPLICATE_ANNOTATION"}, {@code "OVERRIDE_INVALID"})</li>
+     *   <li>{@code message} — human-readable description</li>
+     *   <li>{@code tool} — the tool that produced the error</li>
+     *   <li>any keys from {@code context} — e.g. {@code className}, {@code methodName},
+     *       {@code parameters}, {@code details}, {@code suggestion}</li>
+     * </ul>
+     *
+     * @param errorType a stable, uppercase error category
+     * @param message   human-readable description of the problem
+     * @param context   additional attributes (className, methodName, parameters,
+     *                  details, suggestion, etc.); may be {@code null}
+     * @return a {@code CallToolResult} with {@code isError=false} and JSON content
+     */
+    protected CallToolResult domainError(String errorType, String message, Map<String, Object> context) {
+        try {
+            ObjectNode json = DOMAIN_ERROR_MAPPER.createObjectNode();
+            json.put("error", false);
+            json.put("isDomainError", true);
+            json.put("errorType", errorType != null ? errorType : "UNKNOWN");
+            json.put("message", message != null ? message : "");
+            json.put("tool", toolName());
+            if (context != null) {
+                for (var entry : context.entrySet()) {
+                    String k = entry.getKey();
+                    Object v = entry.getValue();
+                    if (v == null) json.putNull(k);
+                    else if (v instanceof String s) json.put(k, s);
+                    else if (v instanceof Boolean b) json.put(k, b);
+                    else json.put(k, v.toString());
+                }
+            }
+            String content = DOMAIN_ERROR_MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(json);
+            log.warn("Domain error [{}]: {} | context={}", errorType, message, context);
+            return McpSchema.CallToolResult.builder()
+                    .addTextContent(content)
+                    .isError(false)
+                    .build();
+        } catch (Exception e) {
+            log.warn("Domain error fallback [{}]: {}", errorType, message);
+            return McpSchema.CallToolResult.builder()
+                    .addTextContent("Domain error [" + errorType + "]: " + message)
+                    .isError(false)
+                    .build();
+        }
+    }
+
+    /**
+     * Convenience overload: domain error with errorType and message, no context.
+     */
+    protected CallToolResult domainError(String errorType, String message) {
+        return domainError(errorType, message, (Map<String, Object>) null);
+    }
+
+    /**
+     * Convenience overload for a domain error with a single className context.
+     */
+    protected CallToolResult domainError(String errorType, String message, String className) {
+        Map<String, Object> ctx = new LinkedHashMap<>();
+        if (className != null) ctx.put("className", className);
+        return domainError(errorType, message, ctx);
+    }
+
+    /**
+     * Convenience overload: builds a context map from key-value pairs.
+     * Usage: {@code domainError("TYPE_NOT_FOUND", "...", ctx("className", cls, "methodName", m))}
+     */
+    protected static Map<String, Object> ctx(Object... pairs) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        for (int i = 0; i + 1 < pairs.length; i += 2) {
+            m.put(String.valueOf(pairs[i]), pairs[i + 1]);
+        }
+        return m;
     }
 
 /**

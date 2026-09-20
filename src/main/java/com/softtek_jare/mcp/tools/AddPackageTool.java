@@ -77,12 +77,12 @@ public class AddPackageTool extends BaseJavaTool {
             srcDir = entry.projectDir();
             if (srcDir == null) srcDir = entry.originalProjectDir();
         }
-        if (srcDir == null) return error("Cannot determine source directory.");
+        if (srcDir == null) return domainError("DOMAIN_ERROR", "Cannot determine source directory.");
 
         Path packageDir = srcDir.resolve(packageName.replace(".", "/"));
         log.info("add_package: srcRoot={}, packageDir={}", srcDir, packageDir);
         if (Files.exists(packageDir)) {
-            return error("Package '" + packageName + "' already exists at " + packageDir);
+            return domainError("DOMAIN_ERROR", "Package '" + packageName + "' already exists at " + packageDir);
         }
         Files.createDirectories(packageDir);
 

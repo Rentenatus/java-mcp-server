@@ -76,7 +76,7 @@ public class MultiFileSearchTool extends BaseJavaTool {
         boolean caseSensitive = boolArg(request, "caseSensitive");
 
         if (query == null || query.isBlank()) {
-            return error("query cannot be empty");
+            return domainError("DOMAIN_ERROR", "query cannot be empty");
         }
 
         var projects = manager.list();

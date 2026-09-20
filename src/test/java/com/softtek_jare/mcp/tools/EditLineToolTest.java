@@ -106,7 +106,8 @@ class EditLineToolTest {
         CallToolResult result = tool.handle(
                 null, mockRequest(entry.name(), file.toString(), 99, "int x;"));
 
-        assertTrue(result.isError());
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
     }
 
     @Test
@@ -118,7 +119,8 @@ class EditLineToolTest {
         CallToolResult result = tool.handle(
                 null, mockRequest(entry.name(), file.toString(), 0, "int x;"));
 
-        assertTrue(result.isError());
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
     }
 
     @Test

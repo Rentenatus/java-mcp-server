@@ -85,7 +85,7 @@ public class SearchSourceTool extends BaseJavaTool {
         var entry = findEntry(name);
 
         if (query == null || query.isBlank()) {
-            return error("query cannot be empty");
+            return domainError("DOMAIN_ERROR", "query cannot be empty");
         }
 
         String searchQuery = caseSensitive ? query : query.toLowerCase();

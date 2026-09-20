@@ -101,10 +101,10 @@ public class RewriteSignatureTool extends BaseJavaTool {
             if (m.getSimpleName().equals(methodName)) candidates.add(m);
         }
         if (candidates.isEmpty()) {
-            return error("Method '" + methodName + "' not found in " + targetType.getSimpleName());
+            return domainError("DOMAIN_ERROR", "Method '" + methodName + "' not found in " + targetType.getSimpleName());
         }
         if (candidates.size() > 1) {
-            return error("Multiple methods named '" + methodName + "'. Not yet supported for overloaded methods.");
+            return domainError("DOMAIN_ERROR", "Multiple methods named '" + methodName + "'. Not yet supported for overloaded methods.");
         }
         CtMethod<?> target = candidates.get(0);
 
@@ -115,7 +115,7 @@ public class RewriteSignatureTool extends BaseJavaTool {
         // Text-based signature replacement in source
         Path file = target.getPosition().getFile() != null
                 ? target.getPosition().getFile().toPath() : null;
-        if (file == null) return error("Cannot determine source file.");
+        if (file == null) return domainError("DOMAIN_ERROR", "Cannot determine source file.");
 
         String source = LineEndings.readNormalized(file);
         // P47: use fresh-parse declaration line to avoid stale positions after prior edits
@@ -131,7 +131,7 @@ public class RewriteSignatureTool extends BaseJavaTool {
         String newDecl = retType + " " + methodName + "(" + params + ")";
         String newSource = replaceSignatureOnLine(source, methodName, oldDecl, newDecl, declLine);
         if (newSource == null) {
-            return error("Could not find method declaration to replace. Pattern: " + oldDecl);
+            return domainError("DOMAIN_ERROR", "Could not find method declaration to replace. Pattern: " + oldDecl);
         }
 
         boolean signatureChanged = !newSource.equals(source);

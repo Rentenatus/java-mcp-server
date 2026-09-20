@@ -111,7 +111,7 @@ public class RenameSymbolTool extends BaseJavaTool {
         } else if ("class".equals(scope)) {
             callersUpdated = renameClass(entry, targetType, oldName, newName, affectedFiles, updateCallers);
         } else {
-            return error("scope must be 'method', 'field', or 'class'");
+            return domainError("DOMAIN_ERROR", "scope must be 'method', 'field', or 'class'");
         }
 
         // P57: declaration-only rename of overloaded methods is not safe —
@@ -121,7 +121,7 @@ public class RenameSymbolTool extends BaseJavaTool {
             long methodCount = targetType.getMethods().stream()
                     .filter(m -> m.getSimpleName().equals(oldName)).count();
             if (methodCount > 1) {
-                return error("Cannot rename method '" + oldName + "' in declaration-only mode "
+                return domainError("DOMAIN_ERROR", "Cannot rename method '" + oldName + "' in declaration-only mode "
                         + "(updateCallers=false) when overloaded methods exist (" + methodCount
                         + " overloads). Use updateCallers=true to rename all overloads globally.");
             }

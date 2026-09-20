@@ -135,7 +135,8 @@ class AnnotationToolsTest {
         CallToolResult result = removeAnno.handle(null, req(entry.name(), "class",
                 "T", null, "Override", null));
 
-        assertTrue(result.isError());
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
         mgr.remove(entry.name());
     }
 
@@ -162,7 +163,8 @@ class AnnotationToolsTest {
         CallToolResult result = editAnno.handle(null, reqEdit(entry.name(), "class",
                 "V", "Override", "value=true"));
 
-        assertTrue(result.isError());
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
         mgr.remove(entry.name());
     }
 
@@ -219,7 +221,8 @@ class AnnotationToolsTest {
         CallToolResult result = addAnno.handle(null, req(entry.name(), "method",
                 "Over", "process", "Override", null));
 
-        assertTrue(result.isError());
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
         assertTrue(result.content().toString().contains("Multiple methods"));
         mgr.remove(entry.name());
     }
@@ -233,7 +236,8 @@ class AnnotationToolsTest {
         CallToolResult result = editAnno.handle(null, reqEditMethod(entry.name(), "method",
                 "Over2", "process", "Transactional", "value=true"));
 
-        assertTrue(result.isError());
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
         assertTrue(result.content().toString().contains("Multiple methods"));
         mgr.remove(entry.name());
     }
@@ -247,7 +251,8 @@ class AnnotationToolsTest {
         CallToolResult result = removeAnno.handle(null, reqRemoveMethod(entry.name(), "method",
                 "Over3", "process", "Override"));
 
-        assertTrue(result.isError());
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
         assertTrue(result.content().toString().contains("Multiple methods"));
         mgr.remove(entry.name());
     }

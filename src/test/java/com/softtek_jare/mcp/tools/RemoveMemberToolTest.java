@@ -87,7 +87,8 @@ class RemoveMemberToolTest {
 
         CallToolResult result = tool.handle(null, req(entry.name(), "Y", "getVal", "method", "safe"));
 
-        assertTrue(result.isError());
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
         assertTrue(result.content().toString().contains("reference"));
         mgr.remove(entry.name());
     }
@@ -158,7 +159,8 @@ class RemoveMemberToolTest {
 
         CallToolResult result = tool.handle(null, req(entry.name(), "Over", "process", "method", "hard"));
 
-        assertTrue(result.isError());
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
         assertTrue(result.content().toString().contains("Multiple methods"));
         mgr.remove(entry.name());
     }

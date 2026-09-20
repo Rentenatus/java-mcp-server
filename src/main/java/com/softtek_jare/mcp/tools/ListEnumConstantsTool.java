@@ -84,7 +84,7 @@ public class ListEnumConstantsTool extends BaseJavaTool {
                 .orElseThrow(() -> new IllegalArgumentException("Type not found: " + className));
 
         if (!type.isEnum()) {
-            return error("'" + className + "' is not an enum.");
+            return domainError("DOMAIN_ERROR", "'" + className + "' is not an enum.");
         }
 
         CtEnum<?> enumType = (CtEnum<?>) type;

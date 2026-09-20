@@ -97,7 +97,9 @@ public class AddAnnotationTool extends BaseJavaTool {
 
         Path file = type.getPosition().getFile() != null
                 ? type.getPosition().getFile().toPath() : null;
-        if (file == null) return error("Cannot determine source file.");
+        if (file == null) return domainError("NO_SOURCE_FILE",
+                "Cannot determine source file for class '" + className + "'.",
+                ctx("className", className, "annotation", annotation));
 
         String source = LineEndings.readNormalized(file);
         String[] lines = source.split("\n", -1);
@@ -111,12 +113,20 @@ public class AddAnnotationTool extends BaseJavaTool {
             // Duplicate check
             boolean alreadyHas = type.getAnnotations().stream()
                     .anyMatch(a -> annotationMatches(a.getAnnotationType().getQualifiedName(), annotation));
-            if (alreadyHas) return error("Class '" + className + "' already has annotation @" + annotation + ".");
+            if (alreadyHas) return domainError("DUPLICATE_ANNOTATION",
+                    "Class '" + className + "' already has annotation @" + annotation + ".",
+                    ctx("className", className, "targetType", "class", "annotation", annotation,
+                        "suggestion", "Use edit_annotation to modify the existing annotation or remove_annotation first."));
             int declLine = posType.getPosition().getLine();
-            if (declLine < 1) return error("Cannot determine class declaration line.");
+            if (declLine < 1) return domainError("NO_DECL_LINE",
+                    "Cannot determine class declaration line for '" + className + "'.",
+                    ctx("className", className, "annotation", annotation));
             insertLine = declLine - 1; // 0-indexed declaration line; annotation inserted right before it
         } else if ("method".equals(targetType)) {
-            if (targetName == null) return error("targetName required for method annotations.");
+            if (targetName == null) return domainError("MISSING_TARGET_NAME",
+                    "targetName required for method annotations.",
+                    ctx("className", className, "targetType", "method", "annotation", annotation,
+                        "suggestion", "Provide the 'targetName' parameter with the method name."));
             CtMethod<?> method = type.getMethods().stream()
                     .filter(m -> m.getSimpleName().equals(targetName))
                     .findFirst()
@@ -124,27 +134,41 @@ public class AddAnnotationTool extends BaseJavaTool {
             // Duplicate check
             boolean alreadyHas = method.getAnnotations().stream()
                     .anyMatch(a -> annotationMatches(a.getAnnotationType().getQualifiedName(), annotation));
-            if (alreadyHas) return error("Method '" + targetName + "' already has annotation @" + annotation + ".");
+            if (alreadyHas) return domainError("DUPLICATE_ANNOTATION",
+                    "Method '" + targetName + "' already has annotation @" + annotation + ".",
+                    ctx("className", className, "targetType", "method", "targetName", targetName,
+                        "annotation", annotation,
+                        "suggestion", "Use edit_annotation to modify or remove_annotation first."));
             // P50: error on overloaded methods
             long methodCount = type.getMethods().stream()
                     .filter(m -> m.getSimpleName().equals(targetName)).count();
             if (methodCount > 1) {
-                return error("Multiple methods named '" + targetName + "' in " + className
-                        + ". Annotation tools do not yet support overloaded methods.");
+                return domainError("OVERLOADED_METHOD",
+                        "Multiple methods named '" + targetName + "' in " + className
+                        + ". Annotation tools do not yet support overloaded methods.",
+                        ctx("className", className, "targetName", targetName, "annotation", annotation,
+                            "suggestion", "Rename the overloaded methods to disambiguate, or edit the source manually."));
             }
             // Validate @Override semantics: reject when the method does not
             // override any supertype method (would cause a compile error).
             String overrideErr = validateOverride(method, annotation, targetName);
-            if (overrideErr != null) return error(overrideErr);
+            if (overrideErr != null) return domainError("OVERRIDE_INVALID", overrideErr,
+                    ctx("className", className, "targetName", targetName, "annotation", "Override",
+                        "suggestion", "Ensure the method overrides a supertype method, or remove @Override."));
             // P44: use fresh positions for insertion line
             CtMethod<?> freshMethod = posType.getMethods().stream()
                     .filter(m -> m.getSimpleName().equals(targetName))
                     .findFirst().orElse(null);
             int declLine = (freshMethod != null) ? freshMethod.getPosition().getLine() : method.getPosition().getLine();
-            if (declLine < 1) return error("Cannot determine method declaration line.");
+            if (declLine < 1) return domainError("NO_DECL_LINE",
+                    "Cannot determine method declaration line for '" + targetName + "' in '" + className + "'.",
+                    ctx("className", className, "targetType", "method", "targetName", targetName, "annotation", annotation));
             insertLine = declLine - 1; // 0-indexed declaration line; annotation inserted right before it
         } else if ("field".equals(targetType)) {
-            if (targetName == null) return error("targetName required for field annotations.");
+            if (targetName == null) return domainError("MISSING_TARGET_NAME",
+                    "targetName required for field annotations.",
+                    ctx("className", className, "targetType", "field", "annotation", annotation,
+                        "suggestion", "Provide the 'targetName' parameter with the field name."));
             CtField<?> field = type.getFields().stream()
                     .filter(f -> f.getSimpleName().equals(targetName))
                     .findFirst()
@@ -152,16 +176,24 @@ public class AddAnnotationTool extends BaseJavaTool {
             // Duplicate check
             boolean alreadyHas = field.getAnnotations().stream()
                     .anyMatch(a -> annotationMatches(a.getAnnotationType().getQualifiedName(), annotation));
-            if (alreadyHas) return error("Field '" + targetName + "' already has annotation @" + annotation + ".");
+            if (alreadyHas) return domainError("DUPLICATE_ANNOTATION",
+                    "Field '" + targetName + "' already has annotation @" + annotation + ".",
+                    ctx("className", className, "targetType", "field", "targetName", targetName,
+                        "annotation", annotation,
+                        "suggestion", "Use edit_annotation to modify or remove_annotation first."));
             // P44: use fresh positions for insertion line
             CtField<?> freshField = posType.getFields().stream()
                     .filter(f -> f.getSimpleName().equals(targetName))
                     .findFirst().orElse(null);
             int declLine = (freshField != null) ? freshField.getPosition().getLine() : field.getPosition().getLine();
-            if (declLine < 1) return error("Cannot determine field declaration line.");
+            if (declLine < 1) return domainError("NO_DECL_LINE",
+                    "Cannot determine field declaration line for '" + targetName + "' in '" + className + "'.",
+                    ctx("className", className, "targetType", "field", "targetName", targetName, "annotation", annotation));
             insertLine = declLine - 1; // 0-indexed declaration line; annotation inserted right before it
         } else {
-            return error("targetType must be 'class', 'method', or 'field'");
+            return domainError("INVALID_TARGET_TYPE",
+                    "targetType must be 'class', 'method', or 'field'",
+                    ctx("targetType", targetType, "validTypes", "class, method, field"));
         }
 
         // Insert annotation line before the declaration

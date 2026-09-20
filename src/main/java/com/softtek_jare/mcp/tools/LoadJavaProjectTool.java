@@ -163,17 +163,18 @@ public class LoadJavaProjectTool implements McpTool {
     private McpSchema.CallToolResult buildError(String type, String message) {
         try {
             ObjectNode json = MAPPER.createObjectNode();
-            json.put("error", true);
-            json.put("type", type);
+            json.put("error", false);
+            json.put("isDomainError", true);
+            json.put("errorType", type != null ? type : "UNKNOWN");
             json.put("message", message != null ? message : "");
             return McpSchema.CallToolResult.builder()
                     .addTextContent(MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(json))
-                    .isError(true)
+                    .isError(false)
                     .build();
         } catch (Exception e) {
             return McpSchema.CallToolResult.builder()
-                    .addTextContent("Error loading project: " + message)
-                    .isError(true)
+                    .addTextContent("Domain error [" + type + "]: " + message)
+                    .isError(false)
                     .build();
         }
     }

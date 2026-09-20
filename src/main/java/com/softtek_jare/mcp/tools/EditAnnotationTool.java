@@ -92,10 +92,10 @@ public class EditAnnotationTool extends BaseJavaTool {
 
         Path file = type.getPosition().getFile() != null
                 ? type.getPosition().getFile().toPath() : null;
-        if (file == null) return error("Cannot determine source file.");
+        if (file == null) return domainError("DOMAIN_ERROR", "Cannot determine source file.");
 
         String targetErr = validateAnnotationTarget(targetType, targetName);
-        if (targetErr != null) return error(targetErr);
+        if (targetErr != null) return domainError("DOMAIN_ERROR", targetErr);
 
         String source = LineEndings.readNormalized(file);
         // P46: use fresh-parse positions to avoid stale annotation window after prior edits
@@ -106,7 +106,7 @@ public class EditAnnotationTool extends BaseJavaTool {
             long methodCount = posType.getMethods().stream()
                     .filter(m -> m.getSimpleName().equals(targetName)).count();
             if (methodCount > 1) {
-                return error("Multiple methods named '" + targetName + "' in " + className
+                return domainError("DOMAIN_ERROR", "Multiple methods named '" + targetName + "' in " + className
                         + ". Annotation tools do not yet support overloaded methods.");
             }
         }
@@ -119,7 +119,7 @@ public class EditAnnotationTool extends BaseJavaTool {
         }
         String newSource = replaceAnnotationInWindow(source, startOffset, endOffset, annotation, replacement);
         if (newSource == null) {
-            return error("Annotation '@" + annotation + "' not found on " + targetType
+            return domainError("DOMAIN_ERROR", "Annotation '@" + annotation + "' not found on " + targetType
                     + (targetName != null ? " '" + targetName + "'" : "") + ". Use add_annotation to add it first.");
         }
         entry = editManager.writeFile(entry, file, newSource, null);
