@@ -238,6 +238,58 @@ class RenameSymbolToolTest {
         return new CallToolRequest("rename_symbol", args);
     }
 
+    @Test
+    void renameHandlesCodeAfterInlineBlockComment() throws Exception {
+        // Code following an inline /* comment */ on the same line must be
+        // renamed — replaceInCodeOnly must not skip the entire line.
+        Path file = srcDir.resolve("Inline.java");
+        Files.writeString(file, """
+            class Inline {
+                void run() {
+                    /* setup */ compute();
+                }
+                int compute() { return 0; }
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult r = tool.handle(null, mockRequest(
+                entry.name(), "Inline", "compute", "evaluate", "method"));
+
+        assertFalse(r.isError());
+        String written = Files.readString(file);
+        assertTrue(written.contains("/* setup */ evaluate()"),
+                "code after inline block comment must be renamed, got:\n" + written);
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void renameHandlesCodeAfterBlockCommentClose() throws Exception {
+        // When a multi-line block comment closes mid-line, the code after */
+        // must be renamed, not skipped as part of the comment.
+        Path file = srcDir.resolve("Multi.java");
+        Files.writeString(file, """
+            class Multi {
+                void run() {
+                    /* multi
+                       line
+                       comment */ compute();
+                }
+                int compute() { return 0; }
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult r = tool.handle(null, mockRequest(
+                entry.name(), "Multi", "compute", "evaluate", "method"));
+
+        assertFalse(r.isError());
+        String written = Files.readString(file);
+        assertTrue(written.contains("*/ evaluate()"),
+                "code after block comment close must be renamed, got:\n" + written);
+        mgr.remove(entry.name());
+    }
+
     private static CallToolRequest mockRequestDeclOnly(String name, String className,
             String oldName, String newName, String scope) {
         Map<String, Object> args = new HashMap<>();

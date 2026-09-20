@@ -1114,12 +1114,27 @@ public abstract class BaseJavaTool implements McpTool {
             String line = lines[i];
             String trimmed = line.trim();
             if (inBlockComment) {
+                int closeIdx = line.indexOf("*/");
+                if (closeIdx >= 0) {
+                    // Block comment closes on this line — code may follow after */
+                    inBlockComment = false;
+                    result.append(line, 0, closeIdx + 2);
+                    String rest = line.substring(closeIdx + 2);
+                    result.append(replaceOutsideStrings(rest, namePattern, newName));
+                    if (hasUnclosedBlockComment(rest)) inBlockComment = true;
+                } else {
+                    result.append(line);
+                }
+            } else if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("*/")) {
                 result.append(line);
-                if (trimmed.contains("*/")) inBlockComment = false;
-            } else if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")
-                    || trimmed.startsWith("/**") || trimmed.startsWith("*/")) {
-                result.append(line);
-                if (trimmed.startsWith("/*") && !trimmed.contains("*/")) inBlockComment = true;
+            } else if (trimmed.startsWith("/*")) {
+                if (trimmed.contains("*/")) {
+                    // Block comment opens and closes on same line — code may follow after */
+                    result.append(replaceOutsideStrings(line, namePattern, newName));
+                } else {
+                    result.append(line);
+                    inBlockComment = true;
+                }
             } else {
                 result.append(replaceOutsideStrings(line, namePattern, newName));
                 if (hasUnclosedBlockComment(line)) inBlockComment = true;
