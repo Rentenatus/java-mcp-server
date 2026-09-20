@@ -180,6 +180,24 @@ class RemoveMemberToolTest {
         mgr.remove(entry.name());
     }
 
+    @Test
+    void hardModeRemovesSingleLineMethodWithoutDeletingSibling() throws Exception {
+        // All methods on one line: removing one must not delete the others or the
+        // class. The line-based removal used to drop the entire shared line.
+        Path file = srcDir.resolve("SL.java");
+        Files.writeString(file, "class SL { int getX() { return 0; } int getY() { return 1; } }");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = tool.handle(null, req(entry.name(), "SL", "getX", "method", "hard"));
+
+        assertFalse(result.isError(), () -> result.content().toString());
+        String written = Files.readString(file);
+        assertFalse(written.contains("getX"), "getX must be removed:\n" + written);
+        assertTrue(written.contains("int getY() { return 1; }"), "getY must survive:\n" + written);
+        assertTrue(written.contains("class SL"), "class header must survive:\n" + written);
+        mgr.remove(entry.name());
+    }
+
     private static CallToolRequest req(String name, String className, String memberName,
             String scope, String mode) {
         Map<String, Object> args = new HashMap<>();

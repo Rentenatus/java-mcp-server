@@ -116,6 +116,12 @@ public class RemoveMemberTool extends BaseJavaTool {
         if (file == null) return domainError("DOMAIN_ERROR", "Cannot determine source file.");
 
         String source = LineEndings.readNormalized(file);
+        String raw;
+        try {
+            raw = java.nio.file.Files.readString(file);
+        } catch (java.io.IOException e) {
+            raw = source;
+        }
         // P45: use fresh-parse positions to avoid stale line numbers after prior edits
         CtType<?> freshType = locateFreshType(file, className);
         CtType<?> posType = (freshType != null) ? freshType : targetType;
@@ -144,7 +150,7 @@ public class RemoveMemberTool extends BaseJavaTool {
                 return domainError("DOMAIN_ERROR", "Multiple methods named '" + memberName + "' in " + className
                         + ". Provide the 'signature' parameter to disambiguate.");
             }
-            newSource = removeMethodByPosition(source, method);
+            newSource = removeMethodByPosition(source, raw, method);
         } else if ("field".equals(scope)) {
             CtField<?> field = posType.getFields().stream()
                     .filter(f -> f.getSimpleName().equals(memberName))
@@ -153,7 +159,7 @@ public class RemoveMemberTool extends BaseJavaTool {
             if (field == null) {
                 return domainError("DOMAIN_ERROR", "Field '" + memberName + "' not found in " + className);
             }
-            newSource = removeFieldByPosition(source, field);
+            newSource = removeFieldByPosition(source, raw, field);
         } else {
             return domainError("DOMAIN_ERROR", "scope must be 'method' or 'field'");
         }
@@ -213,7 +219,51 @@ public class RemoveMemberTool extends BaseJavaTool {
         return refs;
     }
 
-    private String removeMethodByPosition(String source, CtMethod<?> method) {
+    private String removeMethodByPosition(String source, String raw, CtMethod<?> method) {
+        var pos = method.getPosition();
+        int diskStart = pos.getSourceStart();
+        int diskEnd = pos.getSourceEnd();
+        if (diskStart >= 0 && diskEnd >= diskStart) {
+            int mStart = mapDiskOffsetToNormalized(raw, source, diskStart);
+            int mEnd = mapDiskOffsetToNormalized(raw, source, diskEnd);
+            if (mStart >= 0 && mEnd >= mStart && mEnd < source.length() && source.charAt(mEnd) == '}') {
+                // Preceding standalone annotation/comment lines: keep the existing
+                // line-based heuristic, but only remove whole lines strictly before
+                // the method's start line (so a method that shares a line with
+                // other content is not deleted together with that content).
+                String[] lines = source.split("\n", -1);
+                int startIdx = pos.getLine() - 1;
+                int lineBegin = source.lastIndexOf('\n', mStart) + 1;
+                int removeStart = mStart;
+                if (startIdx >= 0 && startIdx < lines.length) {
+                    int commentLineStart = commentBlockStart(lines, startIdx);
+                    if (commentLineStart < startIdx) {
+                        int cs = lineStartOffset(source, commentLineStart + 1);
+                        if (cs >= 0 && cs <= mStart) removeStart = cs;
+                    } else if (source.substring(lineBegin, mStart).strip().isEmpty()) {
+                        // No preceding comment/annotation block and the method
+                        // starts at the beginning of its line: drop the leading
+                        // indentation too so the following line does not inherit it.
+                        removeStart = lineBegin;
+                    }
+                }
+                int removeEnd = mEnd + 1;
+                // Consume the trailing newline right after the method's closing
+                // brace to avoid leaving a blank line — but only when the next
+                // char is actually a newline (the method may share its line with
+                // following content).
+                if (removeEnd < source.length() && source.charAt(removeEnd) == '\n') {
+                    removeEnd++;
+                }
+                return source.substring(0, removeStart) + source.substring(removeEnd);
+            }
+        }
+        // Fallback: line-based removal (no reliable source offsets).
+        return removeMethodByLines(source, method);
+    }
+
+    /** Line-based fallback for method removal. */
+    private String removeMethodByLines(String source, CtMethod<?> method) {
         int startLine = method.getPosition().getLine();
         int endLine = method.getPosition().getEndLine();
         if (startLine < 1 || endLine < startLine) return source;
@@ -232,9 +282,9 @@ public class RemoveMemberTool extends BaseJavaTool {
         return result.toString();
     }
 
-    private String removeFieldByPosition(String source, CtField<?> field) {
-        int startLine = field.getPosition().getLine();
-        int endLine = field.getPosition().getEndLine();
+    private String removeFieldByPosition(String source, String raw, CtField<?> field) {
+        var pos = field.getPosition();
+        int startLine = pos.getLine();
         if (startLine < 1) return source;
         String[] lines = source.split("\n", -1);
         int startIdx = startLine - 1;
@@ -244,7 +294,8 @@ public class RemoveMemberTool extends BaseJavaTool {
         // fields. A position-based line removal would delete the sibling too.
         // When the declaration line contains a comma, remove only the named
         // fragment from that line and keep the rest.
-        if (endLine <= startLine && lines[startIdx].contains(",")) {
+        int endLine = pos.getEndLine();
+        if (endLine <= startLine && startIdx < lines.length && lines[startIdx].contains(",")) {
             lines[startIdx] = removeFieldFragmentFromLine(lines[startIdx], fieldName);
             if (lines[startIdx].trim().isEmpty() || lines[startIdx].trim().equals(";")) {
                 // Whole line reduced to nothing meaningful — drop it.
@@ -253,11 +304,32 @@ public class RemoveMemberTool extends BaseJavaTool {
             return String.join("\n", lines);
         }
 
-        // Single-field declaration (possibly spanning multiple lines): remove
-        // the declaration lines plus any Javadoc/comment block above them.
+        // Prefer exact char-span removal so a field that shares a line with
+        // other content (e.g. a single-line class with several fields) does not
+        // pull its siblings into the deletion.
+        int diskStart = pos.getSourceStart();
+        int diskEnd = pos.getSourceEnd();
+        if (diskStart >= 0 && diskEnd >= diskStart) {
+            int fStart = mapDiskOffsetToNormalized(raw, source, diskStart);
+            int fEnd = mapDiskOffsetToNormalized(raw, source, diskEnd);
+            if (fStart >= 0 && fEnd >= fStart && fEnd < source.length()) {
+                int lineBegin = source.lastIndexOf('\n', fStart) + 1;
+                int commentLineStart = commentBlockStart(lines, startIdx);
+                int removeStart = fStart;
+                if (commentLineStart < startIdx) {
+                    int cs = lineStartOffset(source, commentLineStart + 1);
+                    if (cs >= 0 && cs <= fStart) removeStart = cs;
+                } else if (source.substring(lineBegin, fStart).strip().isEmpty()) {
+                    removeStart = lineBegin;
+                }
+                int removeEnd = fEnd + 1;
+                if (removeEnd < source.length() && source.charAt(removeEnd) == '\n') removeEnd++;
+                return source.substring(0, removeStart) + source.substring(removeEnd);
+            }
+        }
 
+        // Fallback: line-based removal (possibly multi-line declaration).
         int commentStart = commentBlockStart(lines, startIdx);
-
         int endIdx = Math.min(Math.max(endLine, startLine), lines.length);
         return dropLines(lines, commentStart, endIdx);
     }

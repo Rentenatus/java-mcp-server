@@ -264,6 +264,38 @@ public abstract class BaseJavaTool implements McpTool {
     }
 
 /**
+ * Maps a char offset from the on-disk (possibly CRLF) file content to the
+ * equivalent offset in the CR-stripped {@code normalized} source, by
+ * subtracting the carriage-return characters that precede it. Returns -1 if
+ * the offset is out of range. Used by the text-based edit tools to translate
+ * Spoon source positions (which are based on the on-disk file) into the
+ * CR-stripped buffer they edit.
+ */
+    protected static int mapDiskOffsetToNormalized(String raw, String normalized, int diskOffset) {
+        if (diskOffset < 0) return -1;
+        int crBefore = 0;
+        for (int k = 0; k < diskOffset && k < raw.length(); k++) {
+            if (raw.charAt(k) == '\r') crBefore++;
+        }
+        int candidate = diskOffset - crBefore;
+        if (candidate >= 0 && candidate <= normalized.length()) return candidate;
+        return -1;
+    }
+
+/**
+ * Returns the char offset of the start of the given 1-indexed line.
+ */
+    protected static int lineStartOffset(String source, int line1) {
+        int idx = 0;
+        for (int l = 1; l < line1; l++) {
+            int nl = source.indexOf('\n', idx);
+            if (nl < 0) return source.length();
+            idx = nl + 1;
+        }
+        return idx;
+    }
+
+/**
  * Formats an expiry warning for newly expired projects.
  */
     protected static String formatExpiredWarning(List<String> expiredNames) {
