@@ -1147,7 +1147,7 @@ public abstract class BaseJavaTool implements McpTool {
                 } else {
                     result.append(line);
                 }
-            } else if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("*/")) {
+            } else if (trimmed.startsWith("//") || trimmed.startsWith("*/")) {
                 result.append(line);
             } else if (trimmed.startsWith("/*")) {
                 if (trimmed.contains("*/")) {
@@ -1185,6 +1185,10 @@ public abstract class BaseJavaTool implements McpTool {
             }
             if (c == '"') { inString = true; idx++; continue; }
             if (c == '\'') { inChar = true; idx++; continue; }
+            // Line comment — rest of the line is a comment, not a block opener.
+            if (c == '/' && idx + 1 < line.length() && line.charAt(idx + 1) == '/') {
+                return false;
+            }
             if (c == '/' && idx + 1 < line.length() && line.charAt(idx + 1) == '*') {
                 int close = line.indexOf("*/", idx + 2);
                 return close < 0;

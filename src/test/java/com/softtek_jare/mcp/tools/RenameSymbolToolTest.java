@@ -423,4 +423,64 @@ class RenameSymbolToolTest {
                 "AbstractZeile must not be touched, got:\n" + absWritten);
         mgr.remove(entry.name());
     }
+
+    @Test
+    void renameRenamesCodeOnLineStartingWithStar() throws Exception {
+        // A line starting with '*' after trimming is code (multiplication
+        // continuation), not a block-comment continuation — replaceInCodeOnly
+        // must not skip it. Without this fix, compute() on the continuation
+        // line would not be renamed, breaking compilation.
+        Path file = srcDir.resolve("Star.java");
+        Files.writeString(file, """
+            class Star {
+                int compute() { return 0; }
+                int run() {
+                    int x = 5
+                        * compute();
+                    return x;
+                }
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult r = tool.handle(null, mockRequest(
+                entry.name(), "Star", "compute", "evaluate", "method"));
+
+        assertFalse(r.isError());
+        String written = Files.readString(file);
+        assertTrue(written.contains("* evaluate();"),
+                "code on *-starting line must be renamed, got:\n" + written);
+        assertTrue(!written.contains("compute()"),
+                "old name must not remain, got:\n" + written);
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void renameHandlesBlockCommentOpenerInsideLineComment() throws Exception {
+        // A /* inside a // line comment must NOT be treated as an unclosed
+        // block comment. The next line is code and must be renamed.
+        Path file = srcDir.resolve("LineComment.java");
+        Files.writeString(file, """
+            class LineComment {
+                int compute() { return 0; }
+                int run() {
+                    int y = 1; // see /* pattern
+                    int z = compute();
+                    return y + z;
+                }
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult r = tool.handle(null, mockRequest(
+                entry.name(), "LineComment", "compute", "evaluate", "method"));
+
+        assertFalse(r.isError());
+        String written = Files.readString(file);
+        assertTrue(written.contains("evaluate()"),
+                "code after // line comment with /* must be renamed, got:\n" + written);
+        assertTrue(written.contains("// see /* pattern"),
+                "line comment must be preserved, got:\n" + written);
+        mgr.remove(entry.name());
+    }
 }
