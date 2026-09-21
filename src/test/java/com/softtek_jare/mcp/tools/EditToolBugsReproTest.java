@@ -240,6 +240,25 @@ class EditToolBugsReproTest {
         mgr.remove(entry.name());
     }
 
+    // BUG 9: add_method must detect erasure collision between varargs (int...)
+    // and array (int[]) — they have the same erasure and Java does not permit both.
+    @Test
+    void bug9_addMethodVarargsErasureCollision() throws Exception {
+        Path file = srcDir.resolve("VarColl.java");
+        Files.writeString(file, "class VarColl {\n  void process(int[] arr) {}\n}\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+        AddMethodTool tool = new AddMethodTool(mgr, editMgr);
+
+        CallToolResult result = tool.handle(null, methodReq(
+                entry.name(), "VarColl", "process", "void", "int... arr", "public", null));
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"),
+                "Adding int... must clash with existing int[], got: " + result.content().toString());
+        assertTrue(result.content().toString().contains("erasure") || result.content().toString().contains("Erasure"),
+                "Expected erasure collision message, got: " + result.content().toString());
+        mgr.remove(entry.name());
+    }
+
     // --- request builders ---
 
     private static CallToolRequest classReq(String name, String pkg, String className,
