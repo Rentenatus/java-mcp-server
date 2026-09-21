@@ -113,8 +113,14 @@ public class EditLineTool extends BaseJavaTool {
             return domainError("DOMAIN_ERROR", "File has " + lineCount + " line(s); cannot replace line " + lineNumber);
         }
 
-        // Normalize CR from newContent as well
+        // Normalize CR from newContent, then strip trailing newlines. The
+        // contract is "New content for the line (without line ending)" — any
+        // trailing \n or \r\n the caller passes would otherwise produce a
+        // spurious blank line after String.join("\n", lines).
         String normalizedNewContent = LineEndings.normalizeForMatch(newContent);
+        while (normalizedNewContent.endsWith("\n")) {
+            normalizedNewContent = normalizedNewContent.substring(0, normalizedNewContent.length() - 1);
+        }
         lines[lineNumber - 1] = normalizedNewContent;
 
         String newFileContent = String.join("\n", lines);

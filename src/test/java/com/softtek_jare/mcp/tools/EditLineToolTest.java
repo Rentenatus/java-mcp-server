@@ -170,6 +170,25 @@ class EditLineToolTest {
         String written = Files.readString(file);
         assertFalse(written.contains("int y;\r"));
         assertTrue(written.contains("int y;"));
+        // A trailing \n in newContent must not create a spurious blank line.
+        assertFalse(written.contains("int y;\n\n"), "trailing newline must not create a blank line");
+    }
+
+    @Test
+    void trailingNewlineInNewContentStripped() throws Exception {
+        // newContent with a trailing \n (LF only, no CR) must also not create
+        // a blank line — the line ending is added by the join, not by the caller.
+        Path file = srcDir.resolve("E2.java");
+        Files.writeString(file, "class E {\nint x;\n}\n");
+        ProjectEntry entry = loadProject(file);
+
+        CallToolResult result = tool.handle(
+                null, mockRequest(entry.name(), file.toString(), 2, "int y;\n"));
+
+        assertFalse(result.isError());
+        String written = Files.readString(file);
+        assertFalse(written.contains("int y;\n\n"), "trailing LF must not create a blank line");
+        assertTrue(written.contains("int y;\n}\n"));
     }
 
     @Test
