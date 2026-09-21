@@ -364,9 +364,13 @@ public class RemoveMemberTool extends BaseJavaTool {
         return true;
     }
 
-    /** Strips generics and package prefix from a parameter type string. */
+    /** Strips generics and package prefix from a parameter type string. Varargs ("...") are normalized to "[]". */
     private static String eraseType(String type) {
         String t = type.trim();
+        // Normalize varargs: "int..." -> "int[]" (Spoon stores varargs as array)
+        if (t.endsWith("...")) {
+            t = t.substring(0, t.length() - 3) + "[]";
+        }
         int lt = t.indexOf('<');
         if (lt >= 0) t = t.substring(0, lt).trim();
         int lastDot = t.lastIndexOf('.');
