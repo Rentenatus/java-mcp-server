@@ -62,7 +62,11 @@ public class AddClassTool extends BaseJavaTool {
             "packageName", Map.of("type", "string", "description", "Package name (e.g. 'com.example')"),
             "className", Map.of("type", "string", "description", "Class name"),
             "type", Map.of("type", "string", "description", "'class', 'enum', 'interface', or 'abstract' (default: class)"),
-            "body", Map.of("type", "string", "description", "Optional: class body (fields, methods)")
+            "body", Map.of("type", "string", "description", "Optional: class body (fields, methods)"),
+            "imports", Map.of("type", "array", "description",
+                "Optional: list of fully-qualified import names (e.g. ['java.util.List']) "
+                + "to disambiguate types with the same simple name in different packages. "
+                + "Each FQN must be a project type or a loadable JDK class; invalid FQNs are reported as unresolved.")
         );
     }
     @Override protected java.util.List<String> toolRequired() { return req("name", "packageName", "className"); }
@@ -74,6 +78,7 @@ public class AddClassTool extends BaseJavaTool {
         String className = arg(request, "className");
         String type = arg(request, "type");
         String body = arg(request, "body");
+        java.util.List<String> manualImports = stringListArg(request, "imports");
         if (type == null) type = "class";
         if (!type.equals("class") && !type.equals("enum")
                 && !type.equals("interface") && !type.equals("abstract")) {
@@ -111,7 +116,7 @@ public class AddClassTool extends BaseJavaTool {
         // Auto-import resolution for body (target class does not exist yet)
         var importResult = new com.softtek_jare.mcp.edit.AutoImportResolver.Result(java.util.List.of(), java.util.List.of());
         if (body != null && !body.isBlank()) {
-            importResult = new AutoImportResolver().resolve(entry, null, body);
+            importResult = new AutoImportResolver().resolve(entry, null, body, manualImports);
             if (!importResult.unresolvedTypes().isEmpty()) {
                 return domainError("UNRESOLVED_TYPES",
                         "Cannot resolve type(s) in body: " + importResult.unresolvedTypes()

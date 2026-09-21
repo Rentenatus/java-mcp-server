@@ -336,20 +336,111 @@ public class RemoveMemberTool extends BaseJavaTool {
 
     /**
      * Removes a single named declarator from a multi-field declaration line such
-     * as {@code "int x, y;"} or {@code "int x = 1, y = 2;"}, leaving the
-     * remainder syntactically valid. The modifier/type prefix and trailing
-     * semicolon are preserved. Only called when the line contains a comma.
+     * as {@code "int x, y;"}, {@code "int x = 1, y = 2;"}, or
+     * {@code "String s = foo(1, 2), t = "a,b";"}, leaving the remainder
+     * syntactically valid. The modifier/type prefix and trailing semicolon are
+     * preserved. Uses a string/char/paren-aware comma scanner so that commas
+     * inside string literals, char literals, and method-call arguments are not
+     * mistaken for declarator separators.
+     *
+     * @param line      the full source line containing the multi-field declaration
+     * @param fieldName  the declarator name to remove
+     * @return the line with the named declarator removed, or the original line
+     *         if the field name was not found
      */
     private static String removeFieldFragmentFromLine(String line, String fieldName) {
-        String quoted = java.util.regex.Pattern.quote(fieldName);
-        // Non-first declarator: ", fieldName" or ", fieldName = init" (up to , or ;).
-        String nonFirst = ",\\s*" + quoted + "\\s*(=\\s*[^,;]+)?";
-        String updated = line.replaceAll(nonFirst, "");
-        if (!updated.equals(line)) return updated;
-        // First declarator: "fieldName, " or "fieldName = init, " — the type prefix
-        // before fieldName is preserved because only the declarator onward is removed.
-        String first = quoted + "\\s*(=\\s*[^,;]+)?\\s*,\\s*";
-        return line.replaceAll(first, "");
+        // Find top-level comma positions (not inside strings, chars, or parentheses)
+        List<Integer> commas = new ArrayList<>();
+        int depth = 0;
+        boolean inString = false, inChar = false;
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (inString) {
+                if (c == '\\') { i++; continue; }
+                if (c == '"') inString = false;
+                continue;
+            }
+            if (inChar) {
+                if (c == '\\') { i++; continue; }
+                if (c == '\'') inChar = false;
+                continue;
+            }
+            if (c == '"') { inString = true; continue; }
+            if (c == '\'') { inChar = true; continue; }
+            if (c == '(') { depth++; continue; }
+            if (c == ')') { if (depth > 0) depth--; continue; }
+            if (c == ',' && depth == 0) commas.add(i);
+        }
+
+        // Build segments: [0, comma1), [comma1+1, comma2), ..., [lastComma+1, end]
+        List<int[]> segments = new ArrayList<>();
+        int segStart = 0;
+        for (int comma : commas) {
+            segments.add(new int[]{segStart, comma});
+            segStart = comma + 1;
+        }
+        // Last segment goes to end of line
+        segments.add(new int[]{segStart, line.length()});
+
+        // Find the segment containing the field name as a whole word.
+        // The first segment includes the type prefix; subsequent segments are
+        // pure declarators.
+        int removeIdx = -1;
+        for (int si = 0; si < segments.size(); si++) {
+            int s = segments.get(si)[0];
+            int e = segments.get(si)[1];
+            String segText = line.substring(s, e);
+            if (containsWholeWord(segText, fieldName)) {
+                removeIdx = si;
+                break;
+            }
+        }
+        if (removeIdx < 0) return line; // not found
+
+        // Remove the segment. For the first segment, keep the type prefix
+        // (everything before the field name) and discard the declarator.
+        // For subsequent segments, discard the entire segment + its leading comma.
+        StringBuilder result = new StringBuilder();
+        for (int si = 0; si < segments.size(); si++) {
+            if (si == removeIdx) {
+                if (si == 0) {
+                    // First segment: preserve type prefix before the field name.
+                    String segText = line.substring(segments.get(si)[0], segments.get(si)[1]);
+                    int namePos = findWholeWord(segText, fieldName);
+                    if (namePos >= 0) {
+                        result.append(segText.substring(0, namePos).stripTrailing());
+                    }
+                }
+                // Skip the removed segment (and its trailing/leading comma)
+                continue;
+            }
+            if (si > 0 && result.length() > 0 && result.charAt(result.length() - 1) != ',') {
+                // Re-insert the comma separator between remaining segments
+                // (unless the previous segment was removed and already handled)
+                if (si - 1 != removeIdx) {
+                    // Previous segment was kept — comma already part of segment text? No.
+                    // We need to add the comma that was at the boundary.
+                }
+            }
+            // Actually, simpler: append segments with commas between them,
+            // skipping the removed one.
+            if (si > 0) result.append(",");
+            result.append(line.substring(segments.get(si)[0], segments.get(si)[1]));
+        }
+        return result.toString();
+    }
+
+    /** Returns true if {@code text} contains {@code word} as a whole word. */
+    private static boolean containsWholeWord(String text, String word) {
+        return findWholeWord(text, word) >= 0;
+    }
+
+    /** Returns the char index of {@code word} as a whole word in {@code text}, or -1. */
+    private static int findWholeWord(String text, String word) {
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile(
+                "\\b" + java.util.regex.Pattern.quote(word) + "\\b");
+        var m = p.matcher(text);
+        return m.find() ? m.start() : -1;
     }
 
     /** Compares a method's parameter types against a signature list (P54). */

@@ -265,6 +265,27 @@ class AddMethodAddFieldTest {
         mgr.remove(entry.name());
     }
 
+    @Test
+    void addMethodWithManualImportDisambiguatesReturnType() throws Exception {
+        // add_method with a return type "List<String>" that is ambiguous between
+        // java.util.List and java.awt.List. The imports parameter resolves it.
+        Path file = srcDir.resolve("Svc.java");
+        Files.writeString(file, "class Svc {\n}\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = addMethod.handle(null, methodReq(
+                entry.name(), "Svc", "getItems", "List<String>", null, "public",
+                "return null;", java.util.List.of("java.util.List")));
+
+        assertFalse(result.isError(), () -> result.content().toString());
+        String written = Files.readString(file);
+        assertTrue(written.contains("import java.util.List;"),
+                "import must be inserted, got:\n" + written);
+        assertTrue(written.contains("public List<String> getItems"),
+                "method must use simple name, got:\n" + written);
+        mgr.remove(entry.name());
+    }
+
     private static CallToolRequest methodReq(String name, String className, String methodName,
             String returnType, String parameters, String modifiers, String body) {
         Map<String, Object> args = new HashMap<>();
@@ -275,6 +296,21 @@ class AddMethodAddFieldTest {
         if (parameters != null) args.put("parameters", parameters);
         if (modifiers != null) args.put("modifiers", modifiers);
         if (body != null) args.put("body", body);
+        return new CallToolRequest("add_method", args);
+    }
+
+    private static CallToolRequest methodReq(String name, String className, String methodName,
+            String returnType, String parameters, String modifiers, String body,
+            java.util.List<String> imports) {
+        Map<String, Object> args = new HashMap<>();
+        args.put("name", name);
+        args.put("className", className);
+        args.put("methodName", methodName);
+        args.put("returnType", returnType);
+        if (parameters != null) args.put("parameters", parameters);
+        if (modifiers != null) args.put("modifiers", modifiers);
+        if (body != null) args.put("body", body);
+        if (imports != null) args.put("imports", imports);
         return new CallToolRequest("add_method", args);
     }
 
