@@ -111,6 +111,40 @@ class EditLineToolTest {
     }
 
     @Test
+    void phantomTrailingLineNotAddressable() throws Exception {
+        // File "class C {}\n" has 1 content line + a trailing newline. The
+        // trailing newline must not create a replaceable phantom "line 2".
+        Path file = srcDir.resolve("C2.java");
+        Files.writeString(file, "class C {}\n");
+        ProjectEntry entry = loadProject(file);
+
+        CallToolResult result = tool.handle(
+                null, mockRequest(entry.name(), file.toString(), 2, "int x;"));
+
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
+        // Trailing newline must be preserved (not dropped by a phantom edit).
+        String written = Files.readString(file);
+        assertTrue(written.endsWith("\n"), "trailing newline must be preserved");
+        assertFalse(written.contains("int x;"));
+    }
+
+    @Test
+    void replaceLastContentLinePreservesTrailingNewline() throws Exception {
+        Path file = srcDir.resolve("C3.java");
+        Files.writeString(file, "class C {\nint x;\n}\n");
+        ProjectEntry entry = loadProject(file);
+
+        CallToolResult result = tool.handle(
+                null, mockRequest(entry.name(), file.toString(), 3, "} // closed"));
+
+        assertFalse(result.isError());
+        String written = Files.readString(file);
+        assertTrue(written.endsWith("\n"), "trailing newline must be preserved");
+        assertTrue(written.contains("} // closed"));
+    }
+
+    @Test
     void lineNumberZero() throws Exception {
         Path file = srcDir.resolve("D.java");
         Files.writeString(file, "class D {}\n");
@@ -136,6 +170,25 @@ class EditLineToolTest {
         String written = Files.readString(file);
         assertFalse(written.contains("int y;\r"));
         assertTrue(written.contains("int y;"));
+        // A trailing \n in newContent must not create a spurious blank line.
+        assertFalse(written.contains("int y;\n\n"), "trailing newline must not create a blank line");
+    }
+
+    @Test
+    void trailingNewlineInNewContentStripped() throws Exception {
+        // newContent with a trailing \n (LF only, no CR) must also not create
+        // a blank line — the line ending is added by the join, not by the caller.
+        Path file = srcDir.resolve("E2.java");
+        Files.writeString(file, "class E {\nint x;\n}\n");
+        ProjectEntry entry = loadProject(file);
+
+        CallToolResult result = tool.handle(
+                null, mockRequest(entry.name(), file.toString(), 2, "int y;\n"));
+
+        assertFalse(result.isError());
+        String written = Files.readString(file);
+        assertFalse(written.contains("int y;\n\n"), "trailing LF must not create a blank line");
+        assertTrue(written.contains("int y;\n}\n"));
     }
 
     @Test
@@ -148,6 +201,33 @@ class EditLineToolTest {
             tool.handle(null, mockRequest("readOnly", file.toString(), 1, "class F { int x; }")));
 
         mgr.remove(entry.name());
+    }
+
+    @Test
+    void relativePathResolvedAgainstSourceRoot() throws Exception {
+        // Maven-style layout: project root contains src/main/java/com/example/Foo.java.
+        // A relative path like "com/example/Foo.java" must resolve against the
+        // source root (src/main/java), not the project root.
+        Path projRoot = tempDir.resolve("mavenproj");
+        Path srcRoot = projRoot.resolve("src/main/java/com/example");
+        Files.createDirectories(srcRoot);
+        Path file = srcRoot.resolve("Foo.java");
+        Files.writeString(file, "package com.example;\n\nclass Foo {\n    int x;\n}\n");
+        // Minimal pom.xml so the loader detects MAVEN
+        Files.writeString(projRoot.resolve("pom.xml"),
+                "<project xmlns=\"http://maven.apache.org/POM/4.0.0\">"
+                + "<modelVersion>4.0.0</modelVersion>"
+                + "<groupId>test</groupId><artifactId>test</artifactId><version>1</version>"
+                + "</project>");
+        ProjectEntry entry = mgr.load(projRoot.toString(), "mavenproj", null, true, true);
+
+        CallToolResult result = tool.handle(
+                null, mockRequest("mavenproj", "com/example/Foo.java", 4, "    int z = 99;"));
+
+        assertFalse(result.isError(), () -> result.content().toString());
+        String written = Files.readString(file);
+        assertTrue(written.contains("int z = 99;"), "relative path edit must reach the file:\n" + written);
+        mgr.remove("mavenproj");
     }
 
     private ProjectEntry loadProject(Path file) throws Exception {

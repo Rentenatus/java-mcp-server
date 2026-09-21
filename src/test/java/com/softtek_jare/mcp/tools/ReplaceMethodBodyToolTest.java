@@ -183,6 +183,103 @@ class ReplaceMethodBodyToolTest {
         mgr.remove(entry.name());
     }
 
+    @Test
+    void replaceBodySingleLineMethod() throws Exception {
+        // Signature, body, and closing brace all on one line — the brace
+        // matcher must find the method's closing brace, not the class brace.
+        Path file = srcDir.resolve("SL.java");
+        Files.writeString(file, "class SL { int getX() { return 0; } int getY() { return 1; } }");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = tool.handle(null, mockRequest(
+                entry.name(), "SL", "getX", null, "return 42;"));
+
+        assertFalse(result.isError());
+        String written = Files.readString(file);
+        assertTrue(written.contains("42"), "new body must be present");
+        assertTrue(written.contains("int getY() { return 1; }"), "sibling method must survive");
+        assertTrue(written.contains("class SL {"), "class header must survive");
+        long classClose = written.lines().filter(l -> l.trim().endsWith("}")).count();
+        assertTrue(classClose >= 1);
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void replaceBodyMultiLineNewBody() throws Exception {
+        Path file = srcDir.resolve("ML.java");
+        Files.writeString(file, """
+            class ML {
+                void run() {
+                    System.out.println("old");
+                }
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = tool.handle(null, mockRequest(
+                entry.name(), "ML", "run", null,
+                "int total = 0;\nfor (int i = 0; i < 10; i++) {\n    total += i;\n}\nSystem.out.println(total);"));
+
+        assertFalse(result.isError());
+        String written = Files.readString(file);
+        assertTrue(written.contains("for (int i = 0; i < 10; i++) {"));
+        assertTrue(written.contains("total += i;"));
+        assertTrue(written.contains("System.out.println(total);"));
+        // nested braces in the new body must be balanced and the method close intact
+        assertTrue(written.contains("void run()"));
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void replaceBodyWithManualImportDisambiguatesList() throws Exception {
+        // Body references List (ambiguous: java.util.List vs java.awt.List).
+        // With the imports parameter, the type resolves and the import is added.
+        Path file = srcDir.resolve("Holder.java");
+        Files.writeString(file, """
+            class Holder {
+                void build() {
+                    return;
+                }
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = tool.handle(null, mockRequest(
+                entry.name(), "Holder", "build", null,
+                "List<String> items = new java.util.ArrayList<>();",
+                java.util.List.of("java.util.List")));
+
+        assertFalse(result.isError(), () -> result.content().toString());
+        String written = Files.readString(file);
+        assertTrue(written.contains("import java.util.List;"),
+                "import must be inserted, got:\n" + written);
+        assertTrue(written.contains("List<String> items"),
+                "body must use simple name, got:\n" + written);
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void replaceBodyVarargsSignature() throws Exception {
+        // Varargs ("int...") in the signature must match the method, since
+        // Spoon stores varargs parameters as arrays ("int[]").
+        Path file = srcDir.resolve("Varargs.java");
+        Files.writeString(file, """
+            class Varargs {
+                int sum(int... values) {
+                    return 0;
+                }
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = tool.handle(null, mockRequest(
+                entry.name(), "Varargs", "sum", "int...", "return 42;"));
+
+        assertFalse(result.isError(), () -> result.content().toString());
+        assertTrue(Files.readString(file).contains("42"));
+        mgr.remove(entry.name());
+    }
+
     private static CallToolRequest mockRequest(String name, String className,
             String methodName, String signature, String newBody) {
         Map<String, Object> args = new HashMap<>();
@@ -191,6 +288,19 @@ class ReplaceMethodBodyToolTest {
         args.put("methodName", methodName);
         if (signature != null) args.put("signature", signature);
         args.put("newBody", newBody);
+        return new CallToolRequest("replace_method_body", args);
+    }
+
+    private static CallToolRequest mockRequest(String name, String className,
+            String methodName, String signature, String newBody,
+            java.util.List<String> imports) {
+        Map<String, Object> args = new HashMap<>();
+        args.put("name", name);
+        args.put("className", className);
+        args.put("methodName", methodName);
+        if (signature != null) args.put("signature", signature);
+        args.put("newBody", newBody);
+        if (imports != null) args.put("imports", imports);
         return new CallToolRequest("replace_method_body", args);
     }
 }

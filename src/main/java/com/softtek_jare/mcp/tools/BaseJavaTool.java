@@ -135,6 +135,28 @@ public abstract class BaseJavaTool implements McpTool {
         return val != null && val;
     }
 
+    /**
+     * Extracts a list-of-strings argument from the request, returning an
+     * empty list if absent. Accepts both {@code List<String>} and arrays of
+     * String; non-String entries are coerced via {@code String.valueOf}.
+     * Returns an empty list (never null) when the key is missing or null.
+     */
+    @SuppressWarnings("unchecked")
+    protected static java.util.List<String> stringListArg(CallToolRequest request, String key) {
+        Object val = request.arguments().get(key);
+        if (val == null) return java.util.List.of();
+        java.util.List<String> result = new java.util.ArrayList<>();
+        if (val instanceof java.util.List<?> list) {
+            for (Object o : list) result.add(o == null ? null : String.valueOf(o));
+        } else if (val instanceof Object[] arr) {
+            for (Object o : arr) result.add(o == null ? null : String.valueOf(o));
+        } else {
+            // Single string — treat as a one-element list for convenience.
+            result.add(String.valueOf(val));
+        }
+        return result;
+    }
+
 /**
  * Finds a loaded project entry by name, throwing if not found.
  */
@@ -261,6 +283,38 @@ public abstract class BaseJavaTool implements McpTool {
             if (i < lines.length - 1) result.append("\n");
         }
         return result.toString();
+    }
+
+/**
+ * Maps a char offset from the on-disk (possibly CRLF) file content to the
+ * equivalent offset in the CR-stripped {@code normalized} source, by
+ * subtracting the carriage-return characters that precede it. Returns -1 if
+ * the offset is out of range. Used by the text-based edit tools to translate
+ * Spoon source positions (which are based on the on-disk file) into the
+ * CR-stripped buffer they edit.
+ */
+    protected static int mapDiskOffsetToNormalized(String raw, String normalized, int diskOffset) {
+        if (diskOffset < 0) return -1;
+        int crBefore = 0;
+        for (int k = 0; k < diskOffset && k < raw.length(); k++) {
+            if (raw.charAt(k) == '\r') crBefore++;
+        }
+        int candidate = diskOffset - crBefore;
+        if (candidate >= 0 && candidate <= normalized.length()) return candidate;
+        return -1;
+    }
+
+/**
+ * Returns the char offset of the start of the given 1-indexed line.
+ */
+    protected static int lineStartOffset(String source, int line1) {
+        int idx = 0;
+        for (int l = 1; l < line1; l++) {
+            int nl = source.indexOf('\n', idx);
+            if (nl < 0) return source.length();
+            idx = nl + 1;
+        }
+        return idx;
     }
 
 /**
@@ -758,6 +812,55 @@ public abstract class BaseJavaTool implements McpTool {
     }
 
     /**
+     * Finds the offset (in the CR-stripped {@code source}) of the closing brace
+     * of the target type. Used by {@link AddMethodTool} and {@link AddFieldTool}
+     * to insert new members before the correct class closing brace.
+     *
+     * <p>The authoritative location is the type's {@code getSourceEnd()} — a char
+     * offset in the on-disk file that points at the type's own closing {@code '}'},
+     * obtained from a fresh re-parse so it stays accurate after prior session
+     * edits. The disk offset is mapped into the CR-stripped source by subtracting
+     * the CR characters before it. This is correct for files with several
+     * top-level types (and nested types, once supported): the last-{@code '}'}
+     * heuristic in {@link #findClassClosingBrace} would otherwise pick a sibling
+     * type's brace and insert the member into the wrong type.
+     *
+     * <p>Falls back to {@link #findClassClosingBrace} when no source end is
+     * available (e.g. a type without a position).
+     *
+     * @param file        the on-disk source file (read to count CR characters)
+     * @param source      the CR-stripped source used for editing
+     * @param freshType   the freshly re-parsed target type (preferred), or null
+     * @param targetType  the in-memory target type (fallback), non-null
+     * @return the offset of the type's closing {@code '}'}, or -1 if not found
+     */
+    protected static int classClosingBraceOffset(java.nio.file.Path file, String source,
+            CtType<?> freshType, CtType<?> targetType) {
+        spoon.reflect.declaration.CtType<?> posType = (freshType != null) ? freshType : targetType;
+        if (posType != null && posType.getPosition() != null) {
+            int diskEnd = posType.getPosition().getSourceEnd();
+            if (diskEnd >= 0) {
+                String raw;
+                try {
+                    raw = java.nio.file.Files.readString(file);
+                } catch (java.io.IOException e) {
+                    raw = source;
+                }
+                int crBefore = 0;
+                for (int k = 0; k < diskEnd && k < raw.length(); k++) {
+                    if (raw.charAt(k) == '\r') crBefore++;
+                }
+                int candidate = diskEnd - crBefore;
+                if (candidate >= 0 && candidate < source.length() && source.charAt(candidate) == '}') {
+                    return candidate;
+                }
+            }
+        }
+        int endLine = (posType != null && posType.getPosition() != null) ? posType.getPosition().getEndLine() : 0;
+        return findClassClosingBrace(source, endLine);
+    }
+
+    /**
      * Finds the offset of the class closing brace by searching for the last
      * top-level {@code '}'} in the source. Scans backward from the end of the
      * file, skipping {@code '}'} characters inside comments and string/char
@@ -1033,12 +1136,27 @@ public abstract class BaseJavaTool implements McpTool {
             String line = lines[i];
             String trimmed = line.trim();
             if (inBlockComment) {
+                int closeIdx = line.indexOf("*/");
+                if (closeIdx >= 0) {
+                    // Block comment closes on this line — code may follow after */
+                    inBlockComment = false;
+                    result.append(line, 0, closeIdx + 2);
+                    String rest = line.substring(closeIdx + 2);
+                    result.append(replaceOutsideStrings(rest, namePattern, newName));
+                    if (hasUnclosedBlockComment(rest)) inBlockComment = true;
+                } else {
+                    result.append(line);
+                }
+            } else if (trimmed.startsWith("//") || trimmed.startsWith("*/")) {
                 result.append(line);
-                if (trimmed.contains("*/")) inBlockComment = false;
-            } else if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")
-                    || trimmed.startsWith("/**") || trimmed.startsWith("*/")) {
-                result.append(line);
-                if (trimmed.startsWith("/*") && !trimmed.contains("*/")) inBlockComment = true;
+            } else if (trimmed.startsWith("/*")) {
+                if (trimmed.contains("*/")) {
+                    // Block comment opens and closes on same line — code may follow after */
+                    result.append(replaceOutsideStrings(line, namePattern, newName));
+                } else {
+                    result.append(line);
+                    inBlockComment = true;
+                }
             } else {
                 result.append(replaceOutsideStrings(line, namePattern, newName));
                 if (hasUnclosedBlockComment(line)) inBlockComment = true;
@@ -1067,6 +1185,10 @@ public abstract class BaseJavaTool implements McpTool {
             }
             if (c == '"') { inString = true; idx++; continue; }
             if (c == '\'') { inChar = true; idx++; continue; }
+            // Line comment — rest of the line is a comment, not a block opener.
+            if (c == '/' && idx + 1 < line.length() && line.charAt(idx + 1) == '/') {
+                return false;
+            }
             if (c == '/' && idx + 1 < line.length() && line.charAt(idx + 1) == '*') {
                 int close = line.indexOf("*/", idx + 2);
                 return close < 0;
@@ -1196,6 +1318,10 @@ public abstract class BaseJavaTool implements McpTool {
 
     private static String eraseSigType(String type) {
         String t = type.trim();
+        // Normalize varargs: "int..." -> "int[]" (Spoon stores varargs as array)
+        if (t.endsWith("...")) {
+            t = t.substring(0, t.length() - 3) + "[]";
+        }
         int lt = t.indexOf('<');
         if (lt >= 0) t = t.substring(0, lt).trim();
         int lastDot = t.lastIndexOf('.');

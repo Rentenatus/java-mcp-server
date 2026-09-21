@@ -74,7 +74,11 @@ public class AddMethodTool extends BaseJavaTool {
             "returnType", Map.of("type", "string", "description", "Return type (e.g. 'void', 'String')"),
             "parameters", Map.of("type", "string", "description", "Comma-separated 'type name' pairs (e.g. 'int count, String label')"),
             "modifiers", Map.of("type", "string", "description", "Optional: 'public', 'private', 'protected', 'static'"),
-            "body", Map.of("type", "string", "description", "Optional: method body (without braces)")
+            "body", Map.of("type", "string", "description", "Optional: method body (without braces)"),
+            "imports", Map.of("type", "array", "description",
+                "Optional: list of fully-qualified import names (e.g. ['java.util.List']) "
+                + "to disambiguate types with the same simple name in different packages. "
+                + "Each FQN must be a project type or a loadable JDK class; invalid FQNs are reported as unresolved.")
         );
     }
     @Override protected List<String> toolRequired() { return req("name", "className", "methodName", "returnType"); }
@@ -88,6 +92,7 @@ public class AddMethodTool extends BaseJavaTool {
         String parameters = arg(request, "parameters");
         String modifiers = arg(request, "modifiers");
         String body = arg(request, "body");
+        java.util.List<String> manualImports = stringListArg(request, "imports");
 
         ProjectEntry entry = findEntry(name);
         requireEditable(entry);
@@ -126,7 +131,7 @@ public class AddMethodTool extends BaseJavaTool {
         if (body != null && !body.isBlank()) {
             importCheckText.append(' ').append(body);
         }
-        var importResult = new AutoImportResolver().resolve(entry, targetType, importCheckText.toString());
+        var importResult = new AutoImportResolver().resolve(entry, targetType, importCheckText.toString(), manualImports);
         if (!importResult.unresolvedTypes().isEmpty()) {
             return domainError("UNRESOLVED_TYPES",
                     "Cannot resolve type(s) in method signature or body: " + importResult.unresolvedTypes()
@@ -200,8 +205,7 @@ public class AddMethodTool extends BaseJavaTool {
         String source = LineEndings.readNormalized(file);
         // P42: use fresh-parse endLine to avoid stale positions after prior edits
         CtType<?> freshType = locateFreshType(file, className);
-        int endLine = (freshType != null) ? freshType.getPosition().getEndLine() : targetType.getPosition().getEndLine();
-        int lastBrace = findClassClosingBrace(source, endLine);
+        int lastBrace = classClosingBraceOffset(file, source, freshType, targetType);
         if (lastBrace < 0) return domainError("MALFORMED_SOURCE",
                 "Malformed source: no closing brace found in " + file.getFileName() + ".",
                 ctx("className", className, "methodName", methodName,
@@ -236,6 +240,10 @@ public class AddMethodTool extends BaseJavaTool {
         while (t.startsWith("final ") || t.startsWith("final\t")) t = t.substring(6).trim();
         int sp = t.lastIndexOf(' ');
         String typePart = sp >= 0 ? t.substring(0, sp) : t;
+        // Normalize varargs: "int..." -> "int[]" (Spoon stores varargs as arrays)
+        if (typePart.endsWith("...")) {
+            typePart = typePart.substring(0, typePart.length() - 3) + "[]";
+        }
         int lt = typePart.indexOf('<');
         if (lt >= 0) typePart = typePart.substring(0, lt).trim();
         int lastDot = typePart.lastIndexOf('.');

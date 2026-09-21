@@ -183,6 +183,109 @@ class AddMethodAddFieldTest {
         mgr.remove(entry.name());
     }
 
+    @Test
+    void addMethodToFirstOfTwoTopLevelTypes() throws Exception {
+        // A file may contain several top-level types (only one may be public).
+        // Adding a method to the FIRST type must insert before that type's
+        // closing brace, not the last '}' in the file (which belongs to the
+        // second type). findClassClosingBrace must respect the target type's
+        // end line; inserting into the wrong type silently corrupts the sibling.
+        Path file = srcDir.resolve("Pair.java");
+        Files.writeString(file, """
+            class First {
+            }
+            class Second {
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = addMethod.handle(null, methodReq(
+                entry.name(), "First", "bar", "void", null, "public", "return;"));
+
+        assertFalse(result.isError(), () -> result.content().toString());
+        String written = Files.readString(file);
+        // The new method must be inside First, before First's closing brace.
+        int barIdx = written.indexOf("public void bar");
+        int firstClose = written.indexOf("}");
+        assertTrue(barIdx >= 0, "new method missing:\n" + written);
+        assertTrue(barIdx < firstClose,
+                "new method must be inside First (before its closing brace):\n" + written);
+        // Second must not receive the stray method.
+        int secondOpen = written.indexOf("}", firstClose + 1);
+        assertTrue(secondOpen < 0 || written.substring(firstClose + 1).indexOf("public void bar") < 0,
+                "Second must not contain the new method:\n" + written);
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void addFieldWithManualImportDisambiguatesList() throws Exception {
+        // java.util.List and java.awt.List share the simple name "List". Without
+        // a manual import, add_field blocks with UNRESOLVED_TYPES. With the
+        // imports parameter set to ["java.util.List"], the type resolves and the
+        // import is inserted.
+        Path file = srcDir.resolve("Hist.java");
+        Files.writeString(file, "class Hist {\n}\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = addField.handle(null, fieldReq(
+                entry.name(), "Hist", "items", "List<String>", "private", null,
+                java.util.List.of("java.util.List")));
+
+        assertFalse(result.isError(), () -> result.content().toString());
+        String written = Files.readString(file);
+        assertTrue(written.contains("import java.util.List;"),
+                "import must be inserted, got:\n" + written);
+        assertTrue(written.contains("private List<String> items;"),
+                "field must use simple name, got:\n" + written);
+        assertTrue(!written.contains("java.util.List<String> items"),
+                "FQN must not leak into the field declaration, got:\n" + written);
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void addFieldWithInvalidManualImportReportedAsUnresolved() throws Exception {
+        // A manual import that is neither a project type nor a loadable JDK class
+        // must be reported as unresolved — the agent cannot inject a bogus import.
+        Path file = srcDir.resolve("Bog.java");
+        Files.writeString(file, "class Bog {\n}\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = addField.handle(null, fieldReq(
+                entry.name(), "Bog", "x", "List<String>", "private", null,
+                java.util.List.of("com.does.not.exist.List")));
+
+        assertFalse(result.isError());
+        assertTrue(result.content().toString().contains("isDomainError"));
+        assertTrue(result.content().toString().contains("List"),
+                "should mention the unresolved type, got: " + result.content());
+        // The field must not have been added.
+        String written = Files.readString(file);
+        assertTrue(!written.contains("items"),
+                "no field should be added on unresolved import, got:\n" + written);
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void addMethodWithManualImportDisambiguatesReturnType() throws Exception {
+        // add_method with a return type "List<String>" that is ambiguous between
+        // java.util.List and java.awt.List. The imports parameter resolves it.
+        Path file = srcDir.resolve("Svc.java");
+        Files.writeString(file, "class Svc {\n}\n");
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult result = addMethod.handle(null, methodReq(
+                entry.name(), "Svc", "getItems", "List<String>", null, "public",
+                "return null;", java.util.List.of("java.util.List")));
+
+        assertFalse(result.isError(), () -> result.content().toString());
+        String written = Files.readString(file);
+        assertTrue(written.contains("import java.util.List;"),
+                "import must be inserted, got:\n" + written);
+        assertTrue(written.contains("public List<String> getItems"),
+                "method must use simple name, got:\n" + written);
+        mgr.remove(entry.name());
+    }
+
     private static CallToolRequest methodReq(String name, String className, String methodName,
             String returnType, String parameters, String modifiers, String body) {
         Map<String, Object> args = new HashMap<>();
@@ -196,6 +299,21 @@ class AddMethodAddFieldTest {
         return new CallToolRequest("add_method", args);
     }
 
+    private static CallToolRequest methodReq(String name, String className, String methodName,
+            String returnType, String parameters, String modifiers, String body,
+            java.util.List<String> imports) {
+        Map<String, Object> args = new HashMap<>();
+        args.put("name", name);
+        args.put("className", className);
+        args.put("methodName", methodName);
+        args.put("returnType", returnType);
+        if (parameters != null) args.put("parameters", parameters);
+        if (modifiers != null) args.put("modifiers", modifiers);
+        if (body != null) args.put("body", body);
+        if (imports != null) args.put("imports", imports);
+        return new CallToolRequest("add_method", args);
+    }
+
     private static CallToolRequest fieldReq(String name, String className, String fieldName,
             String type, String modifiers, String initializer) {
         Map<String, Object> args = new HashMap<>();
@@ -205,6 +323,19 @@ class AddMethodAddFieldTest {
         args.put("type", type);
         if (modifiers != null) args.put("modifiers", modifiers);
         if (initializer != null) args.put("initializer", initializer);
+        return new CallToolRequest("add_field", args);
+    }
+
+    private static CallToolRequest fieldReq(String name, String className, String fieldName,
+            String type, String modifiers, String initializer, java.util.List<String> imports) {
+        Map<String, Object> args = new HashMap<>();
+        args.put("name", name);
+        args.put("className", className);
+        args.put("fieldName", fieldName);
+        args.put("type", type);
+        if (modifiers != null) args.put("modifiers", modifiers);
+        if (initializer != null) args.put("initializer", initializer);
+        if (imports != null) args.put("imports", imports);
         return new CallToolRequest("add_field", args);
     }
 }

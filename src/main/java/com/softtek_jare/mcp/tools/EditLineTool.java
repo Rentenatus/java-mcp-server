@@ -100,12 +100,27 @@ public class EditLineTool extends BaseJavaTool {
         String normalized = LineEndings.readNormalized(file);
         String[] lines = normalized.split("\n", -1);
 
-        if (lineNumber > lines.length) {
-            return domainError("DOMAIN_ERROR", "File has " + lines.length + " line(s); cannot replace line " + lineNumber);
+        // A file ending with a trailing newline produces a phantom empty element
+        // after the last content line (e.g. "a\nb\n" -> ["a","b",""]). That phantom
+        // is not a real line: "replacing" it silently drops the file's trailing
+        // newline and appends content to a non-existent line. edit_line replaces
+        // existing lines only, so the phantom trailing element is not addressable.
+        boolean trailingNewline = normalized.endsWith("\n");
+        int lineCount = trailingNewline ? lines.length - 1 : lines.length;
+        if (lineCount < 1) lineCount = lines.length; // empty/single-newline file
+
+        if (lineNumber > lineCount) {
+            return domainError("DOMAIN_ERROR", "File has " + lineCount + " line(s); cannot replace line " + lineNumber);
         }
 
-        // Normalize CR from newContent as well
+        // Normalize CR from newContent, then strip trailing newlines. The
+        // contract is "New content for the line (without line ending)" — any
+        // trailing \n or \r\n the caller passes would otherwise produce a
+        // spurious blank line after String.join("\n", lines).
         String normalizedNewContent = LineEndings.normalizeForMatch(newContent);
+        while (normalizedNewContent.endsWith("\n")) {
+            normalizedNewContent = normalizedNewContent.substring(0, normalizedNewContent.length() - 1);
+        }
         lines[lineNumber - 1] = normalizedNewContent;
 
         String newFileContent = String.join("\n", lines);
@@ -136,6 +151,14 @@ public class EditLineTool extends BaseJavaTool {
         // Try original project dir
         if (entry.originalProjectDir() != null) {
             Path resolved = entry.originalProjectDir().resolve(filePath);
+            if (Files.exists(resolved)) return resolved;
+        }
+        // Try source root (e.g. src/main/java for Maven projects) — a relative
+        // path like "com/example/Foo.java" only exists under the source root,
+        // not the project root.
+        Path sourceRoot = ProjectManager.resolveSourceRoot(entry);
+        if (sourceRoot != null && !sourceRoot.equals(srcDir)) {
+            Path resolved = sourceRoot.resolve(filePath);
             if (Files.exists(resolved)) return resolved;
         }
         return p;

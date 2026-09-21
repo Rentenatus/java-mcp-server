@@ -30,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -238,6 +239,58 @@ class RenameSymbolToolTest {
         return new CallToolRequest("rename_symbol", args);
     }
 
+    @Test
+    void renameHandlesCodeAfterInlineBlockComment() throws Exception {
+        // Code following an inline /* comment */ on the same line must be
+        // renamed — replaceInCodeOnly must not skip the entire line.
+        Path file = srcDir.resolve("Inline.java");
+        Files.writeString(file, """
+            class Inline {
+                void run() {
+                    /* setup */ compute();
+                }
+                int compute() { return 0; }
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult r = tool.handle(null, mockRequest(
+                entry.name(), "Inline", "compute", "evaluate", "method"));
+
+        assertFalse(r.isError());
+        String written = Files.readString(file);
+        assertTrue(written.contains("/* setup */ evaluate()"),
+                "code after inline block comment must be renamed, got:\n" + written);
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void renameHandlesCodeAfterBlockCommentClose() throws Exception {
+        // When a multi-line block comment closes mid-line, the code after */
+        // must be renamed, not skipped as part of the comment.
+        Path file = srcDir.resolve("Multi.java");
+        Files.writeString(file, """
+            class Multi {
+                void run() {
+                    /* multi
+                       line
+                       comment */ compute();
+                }
+                int compute() { return 0; }
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult r = tool.handle(null, mockRequest(
+                entry.name(), "Multi", "compute", "evaluate", "method"));
+
+        assertFalse(r.isError());
+        String written = Files.readString(file);
+        assertTrue(written.contains("*/ evaluate()"),
+                "code after block comment close must be renamed, got:\n" + written);
+        mgr.remove(entry.name());
+    }
+
     private static CallToolRequest mockRequestDeclOnly(String name, String className,
             String oldName, String newName, String scope) {
         Map<String, Object> args = new HashMap<>();
@@ -248,5 +301,186 @@ class RenameSymbolToolTest {
         args.put("scope", scope);
         args.put("updateCallers", false);
         return new CallToolRequest("rename_symbol", args);
+    }
+
+    @Test
+    void renameInterfaceMethodAlsoRenamesOverrideImplementations() throws Exception {
+        // Renaming a method declared in an interface must also rename every
+        // @Override implementation in subtypes, otherwise the code no longer
+        // compiles (Override no longer overrides anything).
+        Path iface = srcDir.resolve("Shape.java");
+        Files.writeString(iface, """
+            interface Shape {
+                String getMarker();
+            }
+            """);
+        Path circle = srcDir.resolve("Circle.java");
+        Files.writeString(circle, """
+            class Circle implements Shape {
+                @Override
+                public String getMarker() {
+                    return "C";
+                }
+            }
+            """);
+        Path square = srcDir.resolve("Square.java");
+        Files.writeString(square, """
+            class Square implements Shape {
+                @Override
+                public String getMarker() {
+                    return "S";
+                }
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult r = tool.handle(null, mockRequest(
+                entry.name(), "Shape", "getMarker", "getMarkerText", "method"));
+
+        assertFalse(r.isError());
+        // Interface declaration renamed
+        assertTrue(Files.readString(iface).contains("getMarkerText"));
+        assertTrue(!Files.readString(iface).contains("getMarker()"));
+        // Both override implementations renamed
+        String circleWritten = Files.readString(circle);
+        assertTrue(circleWritten.contains("getMarkerText"),
+                "Circle override must be renamed, got:\n" + circleWritten);
+        assertTrue(!circleWritten.contains("getMarker()"),
+                "Circle must not retain old method name, got:\n" + circleWritten);
+        String squareWritten = Files.readString(square);
+        assertTrue(squareWritten.contains("getMarkerText"),
+                "Square override must be renamed, got:\n" + squareWritten);
+        assertTrue(!squareWritten.contains("getMarker()"),
+                "Square must not retain old method name, got:\n" + squareWritten);
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void renameAbstractMethodAlsoRenamesOverrideImplementations() throws Exception {
+        // Same as above but via an abstract class hierarchy (superclass method),
+        // verifying the override scan works for class-based inheritance too.
+        Path base = srcDir.resolve("Animal.java");
+        Files.writeString(base, """
+            abstract class Animal {
+                abstract String sound();
+            }
+            """);
+        Path dog = srcDir.resolve("Dog.java");
+        Files.writeString(dog, """
+            class Dog extends Animal {
+                @Override
+                String sound() {
+                    return "woof";
+                }
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult r = tool.handle(null, mockRequest(
+                entry.name(), "Animal", "sound", "makeSound", "method"));
+
+        assertFalse(r.isError());
+        assertTrue(Files.readString(base).contains("makeSound"));
+        String dogWritten = Files.readString(dog);
+        assertTrue(dogWritten.contains("makeSound"),
+                "Dog override must be renamed, got:\n" + dogWritten);
+        assertTrue(!dogWritten.contains("sound()"),
+                "Dog must not retain old method name, got:\n" + dogWritten);
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void renameInterfaceMethodOnMastermindSampleRenamesAllOverrides() throws Exception {
+        // Regression test against the real mastermind-sample game: renaming the
+        // interface method Zeile.getMarker must reach all three @Override
+        // implementations (CodeZeile, FeedbackZeile, GuessZeile). AbstractZeile
+        // does not override getMarker and must be left untouched.
+        Path sampleSrc = Path.of("src/test/resources/mastermind-sample/src/main/java/com/example");
+        Path copySrc = tempDir.resolve("src/com/example");
+        Files.createDirectories(copySrc);
+        for (String name : new String[]{"Zeile.java", "AbstractZeile.java",
+                "CodeZeile.java", "FeedbackZeile.java", "GuessZeile.java"}) {
+            Files.copy(sampleSrc.resolve(name), copySrc.resolve(name), StandardCopyOption.REPLACE_EXISTING);
+        }
+        ProjectEntry entry = mgr.load(tempDir.resolve("src").toString(), null, null, true, true);
+
+        CallToolResult r = tool.handle(null, mockRequest(
+                entry.name(), "com.example.Zeile", "getMarker", "getMarkerText", "method"));
+
+        assertFalse(r.isError());
+        // Interface + all three overrides renamed
+        for (String name : new String[]{"Zeile.java", "CodeZeile.java",
+                "FeedbackZeile.java", "GuessZeile.java"}) {
+            String written = Files.readString(copySrc.resolve(name));
+            assertTrue(written.contains("getMarkerText"),
+                    name + " must contain new name, got:\n" + written);
+            assertTrue(!written.contains("getMarker()"),
+                    name + " must not retain old method name, got:\n" + written);
+        }
+        // AbstractZeile has no getMarker and must be unchanged
+        String absWritten = Files.readString(copySrc.resolve("AbstractZeile.java"));
+        assertTrue(!absWritten.contains("getMarkerText"),
+                "AbstractZeile must not be touched, got:\n" + absWritten);
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void renameRenamesCodeOnLineStartingWithStar() throws Exception {
+        // A line starting with '*' after trimming is code (multiplication
+        // continuation), not a block-comment continuation — replaceInCodeOnly
+        // must not skip it. Without this fix, compute() on the continuation
+        // line would not be renamed, breaking compilation.
+        Path file = srcDir.resolve("Star.java");
+        Files.writeString(file, """
+            class Star {
+                int compute() { return 0; }
+                int run() {
+                    int x = 5
+                        * compute();
+                    return x;
+                }
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult r = tool.handle(null, mockRequest(
+                entry.name(), "Star", "compute", "evaluate", "method"));
+
+        assertFalse(r.isError());
+        String written = Files.readString(file);
+        assertTrue(written.contains("* evaluate();"),
+                "code on *-starting line must be renamed, got:\n" + written);
+        assertTrue(!written.contains("compute()"),
+                "old name must not remain, got:\n" + written);
+        mgr.remove(entry.name());
+    }
+
+    @Test
+    void renameHandlesBlockCommentOpenerInsideLineComment() throws Exception {
+        // A /* inside a // line comment must NOT be treated as an unclosed
+        // block comment. The next line is code and must be renamed.
+        Path file = srcDir.resolve("LineComment.java");
+        Files.writeString(file, """
+            class LineComment {
+                int compute() { return 0; }
+                int run() {
+                    int y = 1; // see /* pattern
+                    int z = compute();
+                    return y + z;
+                }
+            }
+            """);
+        ProjectEntry entry = mgr.load(srcDir.toString(), null, null, true, true);
+
+        CallToolResult r = tool.handle(null, mockRequest(
+                entry.name(), "LineComment", "compute", "evaluate", "method"));
+
+        assertFalse(r.isError());
+        String written = Files.readString(file);
+        assertTrue(written.contains("evaluate()"),
+                "code after // line comment with /* must be renamed, got:\n" + written);
+        assertTrue(written.contains("// see /* pattern"),
+                "line comment must be preserved, got:\n" + written);
+        mgr.remove(entry.name());
     }
 }

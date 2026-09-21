@@ -73,7 +73,11 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
             "className", Map.of("type", "string", "description", "Fully qualified class name"),
             "methodName", Map.of("type", "string", "description", "Method name"),
             "signature", Map.of("type", "string", "description", "Comma-separated parameter types (e.g. 'int, String')"),
-            "newBody", Map.of("type", "string", "description", "New method body (without enclosing braces)")
+            "newBody", Map.of("type", "string", "description", "New method body (without enclosing braces)"),
+            "imports", Map.of("type", "array", "description",
+                "Optional: list of fully-qualified import names (e.g. ['java.util.List']) "
+                + "to disambiguate types with the same simple name in different packages. "
+                + "Each FQN must be a project type or a loadable JDK class; invalid FQNs are reported as unresolved.")
         );
     }
     @Override protected List<String> toolRequired() { return req("name", "className", "methodName", "newBody"); }
@@ -85,6 +89,7 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
         String methodName = arg(request, "methodName");
         String signature = arg(request, "signature");
         String newBody = arg(request, "newBody");
+        java.util.List<String> manualImports = stringListArg(request, "imports");
 
         ProjectEntry entry = findEntry(name);
         requireEditable(entry);
@@ -126,7 +131,7 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
         }
 
         // Auto-import resolution
-        var importResult = importResolver.resolve(entry, targetType, newBody);
+        var importResult = importResolver.resolve(entry, targetType, newBody, manualImports);
         if (!importResult.unresolvedTypes().isEmpty()) {
             return domainError("DOMAIN_ERROR", "Cannot resolve type(s) in method body: " + importResult.unresolvedTypes()
                     + ". No matching import found in project or declared dependencies. "
@@ -155,14 +160,48 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
                     + "Cannot replace body of a method without one.");
         }
         int bodyStartLine = posMethod.getBody().getPosition().getLine();
-        int bodyEndLine = posMethod.getBody().getPosition().getEndLine();
         log.info("replace_method_body: {}.{} — model line {} | fresh line {} (file={}, used={})",
                 targetType.getSimpleName(), methodName,
                 target.getBody().getPosition().getLine(), bodyStartLine, file,
                 (posMethod == freshMethod) ? "fresh" : "model-fallback");
 
-        String source = LineEndings.readNormalized(file);
-        String newContent = replaceBodyInSource(source, bodyStartLine, bodyEndLine, newBody);
+        // Read the raw file once; derive the CR-stripped source used for editing.
+        String raw = Files.readString(file);
+        String source = LineEndings.normalizeForMatch(raw);
+        // Locate the method's opening brace precisely. The body's source start
+        // (a char offset in the on-disk file) points at the '{'; map it into the
+        // CR-stripped source by subtracting the CR characters before it. This is
+        // robust when the method body shares a line with other braces (e.g. a
+        // single-line class with single-line methods), where the previous
+        // "first '{' at or after the body line" heuristic matched an enclosing
+        // brace and corrupted siblings. Fall back to that heuristic only when no
+        // source start is available.
+        int open = -1;
+        int diskStart = posMethod.getBody().getPosition().getSourceStart();
+        if (diskStart >= 0) {
+            int crBefore = 0;
+            for (int k = 0; k < diskStart && k < raw.length(); k++) {
+                if (raw.charAt(k) == '\r') crBefore++;
+            }
+            int candidate = diskStart - crBefore;
+            if (candidate >= 0 && candidate < source.length() && source.charAt(candidate) == '{') {
+                open = candidate;
+            }
+        }
+        if (open < 0) {
+            int lineStart = lineStartOffset(source, bodyStartLine);
+            open = indexOfOpeningBrace(source, lineStart);
+        }
+        if (open < 0) {
+            return domainError("DOMAIN_ERROR", "Cannot locate the opening brace of method '" + methodName
+                    + "' in " + file.getFileName() + ". The file may be syntactically inconsistent.");
+        }
+        int close = matchingBrace(source, open);
+        if (close < 0) {
+            return domainError("DOMAIN_ERROR", "Cannot locate the closing brace of method '" + methodName
+                    + "' in " + file.getFileName() + ". Unbalanced braces in the source.");
+        }
+        String newContent = replaceBodyInSource(source, open, close, newBody);
         newContent = insertImports(newContent, importResult.importsToAdd());
         entry = editManager.writeFile(entry, file, newContent, null);
         manager.updateEntry(entry);
@@ -195,14 +234,20 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
     }
 
     /**
-     * Strips generic type arguments, array brackets, and fully-qualified
-     * package prefixes from a user-provided parameter type so it can be
-     * compared to the erased simple name from the AST. For example
-     * {@code "List<String>"} becomes {@code "List"}, {@code "int[]"} stays
+     * Strips generic type arguments and fully-qualified package prefixes from
+     * a user-provided parameter type so it can be compared to the erased simple
+     * name from the AST. Varargs ({@code "..."}) are normalized to array
+     * brackets ({@code "[]"}) because Spoon stores varargs as arrays.
+     * For example {@code "List<String>"} becomes {@code "List"},
+     * {@code "int[]"} stays {@code "int[]"}, {@code "int..."} becomes
      * {@code "int[]"}, and {@code "java.lang.String"} becomes {@code "String"}.
      */
     private static String eraseType(String type) {
         String t = type.trim();
+        // Normalize varargs: "int..." -> "int[]" (Spoon stores varargs as array)
+        if (t.endsWith("...")) {
+            t = t.substring(0, t.length() - 3) + "[]";
+        }
         int lt = t.indexOf('<');
         if (lt >= 0) t = t.substring(0, lt).trim();
         // Strip fully-qualified package prefix: "java.lang.String" -> "String"
@@ -227,20 +272,11 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
         return sb.toString();
     }
 
-    private static String replaceBodyInSource(String source, int bodyStartLine, int bodyEndLine, String newBody) {
-        if (bodyStartLine < 1) return source;
+    private static String replaceBodyInSource(String source, int open, int close, String newBody) {
+        if (open < 0 || close < 0) return source;
 
-        // The body position line is the line of the opening '{'. Find the first
-        // '{' at or after that line, then brace-match to the closing '}'. Both
-        // scans skip string/char literals and comments so braces inside them do
-        // not corrupt the match. The previous line-based heuristic searched
-        // backwards from the body line and matched the enclosing class brace,
-        // deleting the method signature.
-        int lineStart = lineStartOffset(source, bodyStartLine);
-        int open = indexOfOpeningBrace(source, lineStart);
-        if (open < 0) return source;
-        int close = matchingBrace(source, open);
-        if (close < 0) return source;
+        // open is the char offset of the method's opening '{'; close is its
+        // matching '}'. Both were verified by the caller.
 
         // Indentation of the line containing the opening brace == method indent.
         int lineBegin = source.lastIndexOf('\n', open) + 1;
@@ -258,17 +294,6 @@ public class ReplaceMethodBodyTool extends BaseJavaTool {
                 + "\n" + body + "\n"
                 + methodIndent + "}"              // closing brace at method indent
                 + source.substring(close + 1);     // remainder of the file
-    }
-
-    /** Returns the char offset of the start of the given 1-indexed line. */
-    private static int lineStartOffset(String source, int line1) {
-        int idx = 0;
-        for (int l = 1; l < line1; l++) {
-            int nl = source.indexOf('\n', idx);
-            if (nl < 0) return source.length();
-            idx = nl + 1;
-        }
-        return idx;
     }
 
     /** Leading whitespace of the (sub)string starting at {@code from}. */

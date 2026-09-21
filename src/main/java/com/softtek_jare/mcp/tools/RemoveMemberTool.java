@@ -116,6 +116,12 @@ public class RemoveMemberTool extends BaseJavaTool {
         if (file == null) return domainError("DOMAIN_ERROR", "Cannot determine source file.");
 
         String source = LineEndings.readNormalized(file);
+        String raw;
+        try {
+            raw = java.nio.file.Files.readString(file);
+        } catch (java.io.IOException e) {
+            raw = source;
+        }
         // P45: use fresh-parse positions to avoid stale line numbers after prior edits
         CtType<?> freshType = locateFreshType(file, className);
         CtType<?> posType = (freshType != null) ? freshType : targetType;
@@ -144,7 +150,7 @@ public class RemoveMemberTool extends BaseJavaTool {
                 return domainError("DOMAIN_ERROR", "Multiple methods named '" + memberName + "' in " + className
                         + ". Provide the 'signature' parameter to disambiguate.");
             }
-            newSource = removeMethodByPosition(source, method);
+            newSource = removeMethodByPosition(source, raw, method);
         } else if ("field".equals(scope)) {
             CtField<?> field = posType.getFields().stream()
                     .filter(f -> f.getSimpleName().equals(memberName))
@@ -153,7 +159,7 @@ public class RemoveMemberTool extends BaseJavaTool {
             if (field == null) {
                 return domainError("DOMAIN_ERROR", "Field '" + memberName + "' not found in " + className);
             }
-            newSource = removeFieldByPosition(source, field);
+            newSource = removeFieldByPosition(source, raw, field);
         } else {
             return domainError("DOMAIN_ERROR", "scope must be 'method' or 'field'");
         }
@@ -213,7 +219,51 @@ public class RemoveMemberTool extends BaseJavaTool {
         return refs;
     }
 
-    private String removeMethodByPosition(String source, CtMethod<?> method) {
+    private String removeMethodByPosition(String source, String raw, CtMethod<?> method) {
+        var pos = method.getPosition();
+        int diskStart = pos.getSourceStart();
+        int diskEnd = pos.getSourceEnd();
+        if (diskStart >= 0 && diskEnd >= diskStart) {
+            int mStart = mapDiskOffsetToNormalized(raw, source, diskStart);
+            int mEnd = mapDiskOffsetToNormalized(raw, source, diskEnd);
+            if (mStart >= 0 && mEnd >= mStart && mEnd < source.length() && source.charAt(mEnd) == '}') {
+                // Preceding standalone annotation/comment lines: keep the existing
+                // line-based heuristic, but only remove whole lines strictly before
+                // the method's start line (so a method that shares a line with
+                // other content is not deleted together with that content).
+                String[] lines = source.split("\n", -1);
+                int startIdx = pos.getLine() - 1;
+                int lineBegin = source.lastIndexOf('\n', mStart) + 1;
+                int removeStart = mStart;
+                if (startIdx >= 0 && startIdx < lines.length) {
+                    int commentLineStart = commentBlockStart(lines, startIdx);
+                    if (commentLineStart < startIdx) {
+                        int cs = lineStartOffset(source, commentLineStart + 1);
+                        if (cs >= 0 && cs <= mStart) removeStart = cs;
+                    } else if (source.substring(lineBegin, mStart).strip().isEmpty()) {
+                        // No preceding comment/annotation block and the method
+                        // starts at the beginning of its line: drop the leading
+                        // indentation too so the following line does not inherit it.
+                        removeStart = lineBegin;
+                    }
+                }
+                int removeEnd = mEnd + 1;
+                // Consume the trailing newline right after the method's closing
+                // brace to avoid leaving a blank line — but only when the next
+                // char is actually a newline (the method may share its line with
+                // following content).
+                if (removeEnd < source.length() && source.charAt(removeEnd) == '\n') {
+                    removeEnd++;
+                }
+                return source.substring(0, removeStart) + source.substring(removeEnd);
+            }
+        }
+        // Fallback: line-based removal (no reliable source offsets).
+        return removeMethodByLines(source, method);
+    }
+
+    /** Line-based fallback for method removal. */
+    private String removeMethodByLines(String source, CtMethod<?> method) {
         int startLine = method.getPosition().getLine();
         int endLine = method.getPosition().getEndLine();
         if (startLine < 1 || endLine < startLine) return source;
@@ -232,9 +282,9 @@ public class RemoveMemberTool extends BaseJavaTool {
         return result.toString();
     }
 
-    private String removeFieldByPosition(String source, CtField<?> field) {
-        int startLine = field.getPosition().getLine();
-        int endLine = field.getPosition().getEndLine();
+    private String removeFieldByPosition(String source, String raw, CtField<?> field) {
+        var pos = field.getPosition();
+        int startLine = pos.getLine();
         if (startLine < 1) return source;
         String[] lines = source.split("\n", -1);
         int startIdx = startLine - 1;
@@ -244,7 +294,8 @@ public class RemoveMemberTool extends BaseJavaTool {
         // fields. A position-based line removal would delete the sibling too.
         // When the declaration line contains a comma, remove only the named
         // fragment from that line and keep the rest.
-        if (endLine <= startLine && lines[startIdx].contains(",")) {
+        int endLine = pos.getEndLine();
+        if (endLine <= startLine && startIdx < lines.length && lines[startIdx].contains(",")) {
             lines[startIdx] = removeFieldFragmentFromLine(lines[startIdx], fieldName);
             if (lines[startIdx].trim().isEmpty() || lines[startIdx].trim().equals(";")) {
                 // Whole line reduced to nothing meaningful — drop it.
@@ -253,31 +304,143 @@ public class RemoveMemberTool extends BaseJavaTool {
             return String.join("\n", lines);
         }
 
-        // Single-field declaration (possibly spanning multiple lines): remove
-        // the declaration lines plus any Javadoc/comment block above them.
+        // Prefer exact char-span removal so a field that shares a line with
+        // other content (e.g. a single-line class with several fields) does not
+        // pull its siblings into the deletion.
+        int diskStart = pos.getSourceStart();
+        int diskEnd = pos.getSourceEnd();
+        if (diskStart >= 0 && diskEnd >= diskStart) {
+            int fStart = mapDiskOffsetToNormalized(raw, source, diskStart);
+            int fEnd = mapDiskOffsetToNormalized(raw, source, diskEnd);
+            if (fStart >= 0 && fEnd >= fStart && fEnd < source.length()) {
+                int lineBegin = source.lastIndexOf('\n', fStart) + 1;
+                int commentLineStart = commentBlockStart(lines, startIdx);
+                int removeStart = fStart;
+                if (commentLineStart < startIdx) {
+                    int cs = lineStartOffset(source, commentLineStart + 1);
+                    if (cs >= 0 && cs <= fStart) removeStart = cs;
+                } else if (source.substring(lineBegin, fStart).strip().isEmpty()) {
+                    removeStart = lineBegin;
+                }
+                int removeEnd = fEnd + 1;
+                if (removeEnd < source.length() && source.charAt(removeEnd) == '\n') removeEnd++;
+                return source.substring(0, removeStart) + source.substring(removeEnd);
+            }
+        }
 
+        // Fallback: line-based removal (possibly multi-line declaration).
         int commentStart = commentBlockStart(lines, startIdx);
-
         int endIdx = Math.min(Math.max(endLine, startLine), lines.length);
         return dropLines(lines, commentStart, endIdx);
     }
 
     /**
      * Removes a single named declarator from a multi-field declaration line such
-     * as {@code "int x, y;"} or {@code "int x = 1, y = 2;"}, leaving the
-     * remainder syntactically valid. The modifier/type prefix and trailing
-     * semicolon are preserved. Only called when the line contains a comma.
+     * as {@code "int x, y;"}, {@code "int x = 1, y = 2;"}, or
+     * {@code "String s = foo(1, 2), t = "a,b";"}, leaving the remainder
+     * syntactically valid. The modifier/type prefix and trailing semicolon are
+     * preserved. Uses a string/char/paren-aware comma scanner so that commas
+     * inside string literals, char literals, and method-call arguments are not
+     * mistaken for declarator separators.
+     *
+     * @param line      the full source line containing the multi-field declaration
+     * @param fieldName  the declarator name to remove
+     * @return the line with the named declarator removed, or the original line
+     *         if the field name was not found
      */
     private static String removeFieldFragmentFromLine(String line, String fieldName) {
-        String quoted = java.util.regex.Pattern.quote(fieldName);
-        // Non-first declarator: ", fieldName" or ", fieldName = init" (up to , or ;).
-        String nonFirst = ",\\s*" + quoted + "\\s*(=\\s*[^,;]+)?";
-        String updated = line.replaceAll(nonFirst, "");
-        if (!updated.equals(line)) return updated;
-        // First declarator: "fieldName, " or "fieldName = init, " — the type prefix
-        // before fieldName is preserved because only the declarator onward is removed.
-        String first = quoted + "\\s*(=\\s*[^,;]+)?\\s*,\\s*";
-        return line.replaceAll(first, "");
+        // Find top-level comma positions (not inside strings, chars, or parentheses)
+        List<Integer> commas = new ArrayList<>();
+        int depth = 0;
+        boolean inString = false, inChar = false;
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (inString) {
+                if (c == '\\') { i++; continue; }
+                if (c == '"') inString = false;
+                continue;
+            }
+            if (inChar) {
+                if (c == '\\') { i++; continue; }
+                if (c == '\'') inChar = false;
+                continue;
+            }
+            if (c == '"') { inString = true; continue; }
+            if (c == '\'') { inChar = true; continue; }
+            if (c == '(') { depth++; continue; }
+            if (c == ')') { if (depth > 0) depth--; continue; }
+            if (c == ',' && depth == 0) commas.add(i);
+        }
+
+        // Build segments: [0, comma1), [comma1+1, comma2), ..., [lastComma+1, end]
+        List<int[]> segments = new ArrayList<>();
+        int segStart = 0;
+        for (int comma : commas) {
+            segments.add(new int[]{segStart, comma});
+            segStart = comma + 1;
+        }
+        // Last segment goes to end of line
+        segments.add(new int[]{segStart, line.length()});
+
+        // Find the segment containing the field name as a whole word.
+        // The first segment includes the type prefix; subsequent segments are
+        // pure declarators.
+        int removeIdx = -1;
+        for (int si = 0; si < segments.size(); si++) {
+            int s = segments.get(si)[0];
+            int e = segments.get(si)[1];
+            String segText = line.substring(s, e);
+            if (containsWholeWord(segText, fieldName)) {
+                removeIdx = si;
+                break;
+            }
+        }
+        if (removeIdx < 0) return line; // not found
+
+        // Remove the segment. For the first segment, keep the type prefix
+        // (everything before the field name) and discard the declarator.
+        // For subsequent segments, discard the entire segment + its leading comma.
+        StringBuilder result = new StringBuilder();
+        for (int si = 0; si < segments.size(); si++) {
+            if (si == removeIdx) {
+                if (si == 0) {
+                    // First segment: preserve type prefix before the field name.
+                    String segText = line.substring(segments.get(si)[0], segments.get(si)[1]);
+                    int namePos = findWholeWord(segText, fieldName);
+                    if (namePos >= 0) {
+                        result.append(segText.substring(0, namePos).stripTrailing());
+                    }
+                }
+                // Skip the removed segment (and its trailing/leading comma)
+                continue;
+            }
+            if (si > 0 && result.length() > 0 && result.charAt(result.length() - 1) != ',') {
+                // Re-insert the comma separator between remaining segments
+                // (unless the previous segment was removed and already handled)
+                if (si - 1 != removeIdx) {
+                    // Previous segment was kept — comma already part of segment text? No.
+                    // We need to add the comma that was at the boundary.
+                }
+            }
+            // Actually, simpler: append segments with commas between them,
+            // skipping the removed one.
+            if (si > 0) result.append(",");
+            result.append(line.substring(segments.get(si)[0], segments.get(si)[1]));
+        }
+        return result.toString();
+    }
+
+    /** Returns true if {@code text} contains {@code word} as a whole word. */
+    private static boolean containsWholeWord(String text, String word) {
+        return findWholeWord(text, word) >= 0;
+    }
+
+    /** Returns the char index of {@code word} as a whole word in {@code text}, or -1. */
+    private static int findWholeWord(String text, String word) {
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile(
+                "\\b" + java.util.regex.Pattern.quote(word) + "\\b");
+        var m = p.matcher(text);
+        return m.find() ? m.start() : -1;
     }
 
     /** Compares a method's parameter types against a signature list (P54). */
@@ -292,9 +455,13 @@ public class RemoveMemberTool extends BaseJavaTool {
         return true;
     }
 
-    /** Strips generics and package prefix from a parameter type string. */
+    /** Strips generics and package prefix from a parameter type string. Varargs ("...") are normalized to "[]". */
     private static String eraseType(String type) {
         String t = type.trim();
+        // Normalize varargs: "int..." -> "int[]" (Spoon stores varargs as array)
+        if (t.endsWith("...")) {
+            t = t.substring(0, t.length() - 3) + "[]";
+        }
         int lt = t.indexOf('<');
         if (lt >= 0) t = t.substring(0, lt).trim();
         int lastDot = t.lastIndexOf('.');

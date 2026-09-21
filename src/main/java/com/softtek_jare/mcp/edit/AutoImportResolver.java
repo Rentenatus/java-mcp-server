@@ -57,12 +57,48 @@ public class AutoImportResolver {
      * @return resolution result with imports to add and/or unresolved types
      */
     public Result resolve(ProjectEntry entry, CtType<?> targetClass, String bodyText) {
+        return resolve(entry, targetClass, bodyText, java.util.Collections.emptyList());
+    }
+
+    /**
+     * Analyzes a method body for type references, with an optional list of
+     * manually supplied fully-qualified import names. When a potential type's
+     * simple name matches the simple name of a manual FQN, the manual FQN is
+     * treated as resolved and added to the import list — this lets the agent
+     * disambiguate types that have the same simple name in different packages
+     * (e.g. {@code java.util.List} vs {@code java.awt.List}) without writing
+     * the FQN into the source text.
+     *
+     * <p>Manual FQNs are validated: a FQN that is neither a project type nor a
+     * loadable JDK class is reported as unresolved so the agent cannot inject
+     * a non-existent import that would fail to compile.
+     *
+     * @param entry         the loaded project entry
+     * @param targetClass   the class where the method body will be placed
+     * @param bodyText      the new method body text
+     * @param manualImports optional fully-qualified names to force-resolve;
+     *                      may be empty/null
+     * @return resolution result with imports to add and/or unresolved types
+     */
+    public Result resolve(ProjectEntry entry, CtType<?> targetClass, String bodyText,
+                          java.util.List<String> manualImports) {
         // targetClass may be null when creating a brand-new class (no existing
         // type yet). In that case there is no existing import scope, same-package
         // membership, or self-reference to skip.
         Set<String> alreadyImported = targetClass != null ? collectImportedTypeNames(targetClass) : new HashSet<>();
         Set<String> projectTypeNames = collectProjectTypeNames(entry);
         Set<String> javaLangTypes = collectJavaLangTypes();
+
+        // Index manual imports by simple name for fast lookup. Only non-blank
+        // FQNs are considered; duplicates collapse silently.
+        java.util.Map<String, String> manualBySimple = new java.util.HashMap<>();
+        if (manualImports != null) {
+            for (String fqn : manualImports) {
+                if (fqn == null || fqn.isBlank()) continue;
+                String simple = fqn.substring(fqn.lastIndexOf('.') + 1);
+                if (!simple.isEmpty()) manualBySimple.putIfAbsent(simple, fqn);
+            }
+        }
 
         // Extract potential type names from body text (capitalized identifiers)
         Set<String> potentialTypes = extractTypeNames(bodyText);
@@ -81,6 +117,24 @@ public class AutoImportResolver {
             }
             // Check if it's the target class itself
             if (targetClass != null && targetClass.getSimpleName().equals(simpleName)) continue;
+
+            // Manual import override: if the agent supplied a FQN whose simple
+            // name matches, validate it (project type or loadable JDK class)
+            // and treat it as resolved. This disambiguates types like
+            // java.util.List vs java.awt.List without forcing the FQN into the
+            // source text.
+            String manualFqn = manualBySimple.get(simpleName);
+            if (manualFqn != null) {
+                if (isValidImport(entry, manualFqn)) {
+                    importsToAdd.add(manualFqn);
+                    continue;
+                }
+                // Invalid manual FQN — report as unresolved so the agent cannot
+                // inject a non-existent import that would break compilation.
+                unresolved.add(simpleName + " (manual import '" + manualFqn
+                        + "' is not a project type or loadable JDK class)");
+                continue;
+            }
 
             // Search project types for a match
             List<String> matches = findInProject(entry, simpleName);
@@ -105,6 +159,27 @@ public class AutoImportResolver {
         }
 
         return new Result(importsToAdd, unresolved);
+    }
+
+    /**
+     * Returns true if the fully-qualified name is either a project type or a
+     * loadable JDK class. Used to validate manual imports so the agent cannot
+     * inject a non-existent import that would break compilation.
+     */
+    private boolean isValidImport(ProjectEntry entry, String fqn) {
+        // Check project types first
+        if (entry.model() != null) {
+            for (CtType<?> t : entry.model().getAllTypes()) {
+                if (t.getQualifiedName().equals(fqn)) return true;
+            }
+        }
+        // Check if it's a loadable JDK class
+        try {
+            Class.forName(fqn, false, ClassLoader.getSystemClassLoader());
+            return true;
+        } catch (ClassNotFoundException | LinkageError e) {
+            return false;
+        }
     }
 
     private Set<String> collectImportedTypeNames(CtType<?> type) {
