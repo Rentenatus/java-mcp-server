@@ -1,8 +1,15 @@
 # java-mcp-server
 
-**Version 1.0.6** — MIT License
+**Version 1.1.0** — MIT License
 
 A deterministic Java code analysis and code modification server that implements the Model Context Protocol (MCP) to give AI agents precise, structured access to Java source code.
+
+---
+
+## Support 🐾
+If you like my projects, consider [supporting my work](https://github.com/sponsors/Rentenatus) (and feeding Mistral 🐱)! 
+
+---
 
 ## Why
 
@@ -15,6 +22,9 @@ When AI agents attempt to analyse or refactor Java codebases using purely textua
 **java-mcp-server** solves this by exposing a rich set of deterministic tools over MCP. It uses Spoon to parse Java source into a full AST, resolves types, references, annotations, and structure — then makes everything available to an AI agent as individual, verifiable tools. The agent never guesses; it queries.
 
 > ⚠️ This project is under active development. Features and APIs may change.
+
+---
+
 
 ## Features
 
@@ -31,6 +41,9 @@ When AI agents attempt to analyse or refactor Java codebases using purely textua
 - **Javadoc support**: `inspect_class`, `inspect_method`, `inspect_field`, and `list_methods` include Javadoc via `withJavadoc=true` (default)
 - **Server version**: displayed at startup and in the `check_project_dirty` status output
 - **Code modification**: 17 edit tools (13 source-editing tools plus a 4-tool transaction layer) for deterministic, AST-backed code changes. **These edit tools are currently experimental and under review.**
+
+---
+
 
 ### Available tools (47)
 
@@ -117,6 +130,9 @@ The server communicates over **stdin/stdout** using the MCP transport protocol, 
 
 Logs are written to `/tmp/java_mcp_server.log` by default (configurable in `src/main/resources/application.yaml`).
 
+---
+
+
 ## Configuration for AI agents
 
 ### Mistral Vibe (TOML)
@@ -198,6 +214,9 @@ java -jar /path/to/java-mcp-server-standalone.jar
 
 The server will listen on stdin for JSON-RPC messages and respond on stdout.
 
+---
+
+
 ## How it works
 
 1. The server loads a Java project using Spoon, optionally leveraging Maven/Gradle metadata for full classpath resolution.
@@ -237,6 +256,9 @@ Four tools accept a `withJavadoc` parameter (default `true`):
 | `inspect_field` | Full field Javadoc in a code block |
 | `list_methods` | First non-empty summary line per method (skips `*` and `@` lines) |
 
+---
+
+
 ## Lombok support
 
 Lombok is an annotation processor that generates code at compile time. Spoon alone sees only the annotations (`@Data`, `@Getter`, …) and not the methods Lombok would generate, which can lead to incomplete analysis. To handle this, `java-mcp-server` ships with a built-in delombok pipeline:
@@ -247,6 +269,9 @@ Lombok is an annotation processor that generates code at compile time. Spoon alo
 - Feeds that directory to Spoon so generated getters/setters/equals/etc. are real AST members.
 
 Disable with `delombok=false` if you want raw source analysis or are debugging.
+
+---
+
 
 ## Logs
 
